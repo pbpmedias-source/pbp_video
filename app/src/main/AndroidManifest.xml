@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Aucune permission de stockage n'est nécessaire :
-  - les médias sont choisis avec le sélecteur de photos système (accès ponctuel accordé par l'utilisateur) ;
-  - la musique est choisie avec le sélecteur de documents ;
-  - la vidéo finale est écrite dans MediaStore (Films/MonMontage), autorisé sans permission depuis Android 10.
+  Aucune permission de stockage : sélecteur de photos système, sélecteur de documents pour la musique,
+  écriture dans MediaStore (Films/MonMontage), autorisée sans permission depuis Android 10.
+  Internet et notifications ne servent qu'à la publication sur YouTube.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:allowBackup="false"
@@ -26,5 +32,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Envoi YouTube en arrière-plan (WorkManager) : type de service exigé par Android 14+. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
     </application>
 </manifest>

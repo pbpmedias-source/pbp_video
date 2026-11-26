@@ -54,10 +54,11 @@ data class Clip(
 
 data class TitleCard(
     val enabled: Boolean = true,
-    val title: String = "Titre de la vidéo",
+    val title: String = "Titre de la série",
     val subtitle: String = "",
     val author: String = "",
-    val date: String = today(),
+    /** Facultative : masquée si vide (le générique est commun à tous les projets). */
+    val date: String = "",
     val durationMs: Long = 4_000,
 )
 
@@ -69,27 +70,70 @@ data class EndCard(
     val durationMs: Long = 4_000,
 )
 
+/** Génériques et logo : communs à TOUS les projets (enregistrés à part). */
+data class Branding(
+    val titleCard: TitleCard = TitleCard(),
+    val endCard: EndCard = EndCard(),
+    val logoUri: Uri? = null,
+)
+
+/** Musiques embarquées, composées par l'application (libres de droits). */
+enum class MusicTrack(val id: String, val label: String, val description: String) {
+    DOUCE("douce", "Douce", "Nappes et arpège, calme · 80 BPM"),
+    ENERGIQUE("energique", "Énergique", "Rythmée, basse pulsée · 120 BPM"),
+    CINEMATIQUE("cinematique", "Cinématique", "Cordes amples, émotion · 64 BPM"),
+    LOFI("lofi", "Lo-fi", "Détendue, accords jazz · 72 BPM");
+
+    companion object {
+        fun fromId(id: String?): MusicTrack = entries.firstOrNull { it.id == id } ?: DOUCE
+    }
+}
+
 data class MusicSettings(
-    /** null = musique par défaut embarquée (générée par l'application). */
-    val uri: Uri? = null,
-    val displayName: String = DEFAULT_NAME,
+    val track: MusicTrack = MusicTrack.DOUCE,
+    /** Musique importée : prioritaire sur [track] quand elle est définie. */
+    val customUri: Uri? = null,
+    val customName: String = "",
     val volume: Float = 0.7f,
     /** true : coupée pendant les interviews ; false : atténuée à 12 %. */
     val muteDuringInterviews: Boolean = true,
 ) {
-    companion object { const val DEFAULT_NAME = "Musique par défaut (libre de droits)" }
+    val label: String get() = if (customUri != null) customName.ifBlank { "Musique importée" } else track.label
 }
 
+enum class TransitionStyle(val label: String, val description: String) {
+    NONE("Aucune", "Coupe franche, sans effet"),
+    FADE_BLACK("Fondu au noir", "L'image s'éteint puis la suivante apparaît"),
+    FLASH_WHITE("Flash blanc", "Bref éclair lumineux, dynamique"),
+    ZOOM("Zoom doux", "L'image suivante entre en léger zoom"),
+}
+
+data class TransitionSettings(
+    val style: TransitionStyle = TransitionStyle.FADE_BLACK,
+    val durationMs: Long = 600,
+)
+
+/** Dernier export du projet (vidéo enregistrée dans la galerie). */
+data class ExportInfo(val uri: Uri, val fileName: String, val exportedAt: Long, val durationMs: Long)
+
+/** Dernière publication sur YouTube. */
+data class YouTubeInfo(val videoId: String, val privacy: String, val publishedAt: Long)
+
 data class Project(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val name: String = "Nouveau projet",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
     val clips: List<Clip> = emptyList(),
-    val titleCard: TitleCard = TitleCard(),
-    val endCard: EndCard = EndCard(),
-    val logoUri: Uri? = null,
     val music: MusicSettings = MusicSettings(),
+    val transition: TransitionSettings = TransitionSettings(),
+    val lastExport: ExportInfo? = null,
+    val youtube: YouTubeInfo? = null,
 )
 
 object Ids {
-    private val counter = AtomicLong(1)
+    // Amorcé sur l'horloge : jamais de collision avec les identifiants des projets rechargés.
+    private val counter = AtomicLong(System.currentTimeMillis() * 1000)
     fun next(): Long = counter.getAndIncrement()
 }
 

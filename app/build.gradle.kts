@@ -37,6 +37,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Avec une clé fixe (keystore.properties ou secrets GitHub), l'APK debug est signé avec elle :
+            // son empreinte SHA-1 ne change plus, condition pour la connexion Google/YouTube.
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -74,6 +79,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // Publication YouTube : autorisation Google et envoi en arrière-plan
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // Media3 : export (Transformer + effets GPU) et lecture (ExoPlayer + PlayerView)
     implementation("androidx.media3:media3-common:$media3")

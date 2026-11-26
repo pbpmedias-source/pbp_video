@@ -1,5 +1,6 @@
 package com.monmontage.app.render
 
+import com.monmontage.app.model.Branding
 import com.monmontage.app.model.Clip
 import com.monmontage.app.model.ClipType
 import com.monmontage.app.model.Project
@@ -39,13 +40,13 @@ data class Timeline(
 object TimelinePlanner {
     private const val MIN_ITEM_MS = 100L
 
-    fun plan(project: Project): Timeline {
+    fun plan(project: Project, branding: Branding): Timeline {
         val items = mutableListOf<TimelineItem>()
         var t = 0L
 
-        if (project.titleCard.enabled) {
-            items += TimelineItem.TitleCardItem(t, project.titleCard.durationMs)
-            t += project.titleCard.durationMs
+        if (branding.titleCard.enabled) {
+            items += TimelineItem.TitleCardItem(t, branding.titleCard.durationMs)
+            t += branding.titleCard.durationMs
         }
         for (clip in project.clips) {
             if (!clip.isVideo) {
@@ -64,9 +65,9 @@ object TimelinePlanner {
                 }
             }
         }
-        if (project.endCard.enabled) {
-            items += TimelineItem.EndCardItem(t, project.endCard.durationMs)
-            t += project.endCard.durationMs
+        if (branding.endCard.enabled) {
+            items += TimelineItem.EndCardItem(t, branding.endCard.durationMs)
+            t += branding.endCard.durationMs
         }
 
         val ranges = mutableListOf<Pair<Long, Long>>()

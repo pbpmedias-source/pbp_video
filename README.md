@@ -1,180 +1,142 @@
 # Mon Montage — monteur vidéo Android pour YouTube
 
-Application Android native (Kotlin, Jetpack Compose, Material 3) qui monte une vidéo à partir
-de la galerie et l'exporte **sur le téléphone, sans serveur**, en **MP4 H.264 + AAC 1080p**, prêt pour YouTube.
+Application Android native (Kotlin, Jetpack Compose, Material 3) qui monte des vidéos à partir de la galerie,
+les exporte **sur le téléphone, sans serveur**, en **MP4 H.264 + AAC 1080p**, et peut les **publier directement
+sur une chaîne YouTube**.
 
 ## Fonctionnalités
 
-| # | Fonction | Où |
-|---|----------|----|
-| 1 | Sélection photos/vidéos (sélecteur système), ordre (↑/↓), type Illustration / Interview | Écran principal |
-| 2 | Découpe : scinder, ajuster début/fin, supprimer des portions, « Lire la découpe » | Toucher un clip vidéo |
-| 3 | Générique de début (titre, sous-titre, auteur, date) + logo, aperçu en direct | « Générique de début » |
-| 4 | Générique de fin (texte principal, secondaire, crédits) + logo | « Générique de fin » |
-| 5 | Musique par défaut embarquée, import d'une autre musique, coupure/sourdine douce pendant les interviews | « Musique de fond » |
-| 6 | Légendes « bandeau JT » (nom + fonction) placées à n'importe quel moment d'un clip | Toucher un clip |
-| 7 | Aperçu du montage complet | Bouton « Aperçu » |
-| 8 | Export MP4 en un bouton, progression visible, enregistrement dans Films/MonMontage, partage | Bouton « Exporter » |
-
-## Design
-
-L'interface suit la maquette graphique validée : thème sombre d'éditeur vidéo (fond `#0E1116`, cartes `#181C24`),
-accent bleu `#6F9BFF`, titres en **Space Grotesk**, texte en **Inter** (polices embarquées dans `res/font`,
-licence SIL OFL dans `licenses/`). Étiquettes de couleur par type (ambre = photo, bleu = illustration,
-orange = interview), barre de découpe, anneau de progression d'export, et sur l'écran Musique une courbe du volume
-calculée à partir du vrai montage. Couleurs et polices sont centralisées dans `ui/theme/Theme.kt`.
+| Fonction | Où |
+|----------|----|
+| **Mes projets** : liste des montages, ouverture, renommage, duplication, suppression (avec confirmation), enregistrement automatique | Écran d'ouverture |
+| Médias de la galerie (sélecteur système), ordre, type Illustration / Interview | Montage d'un projet |
+| Découpe : scinder, ajuster début/fin, supprimer des portions, « Lire la découpe » | Toucher un clip vidéo |
+| Légendes « bandeau JT » (nom + fonction) placées à n'importe quel moment d'un clip | Toucher un clip |
+| **Génériques de début et de fin + logo, communs à tous les projets** | « Génériques et logo » |
+| **4 musiques embarquées** (Douce, Énergique, Cinématique, Lo-fi) ou import ; coupure/sourdine douce pendant les interviews | Musique |
+| **3 styles de transition** (Fondu au noir, Flash blanc, Zoom doux) + « Aucune », appliqués à tout le projet, durée 0,3 / 0,6 / 1 s | Transitions |
+| Aperçu du montage (rendu 480p par le même moteur que l'export) | Aperçu |
+| Export MP4 en un bouton, progression, enregistrement dans Films/MonMontage | Exporter |
+| **Publication YouTube** : titre, description, visibilité, public visé, Wi-Fi seulement, envoi en arrière-plan reprenable | Après l'export |
 
 ## Choix techniques
 
-* **Export : Media3 Transformer 1.4.1** — bibliothèque officielle Google (successeur d'ExoPlayer), qui utilise
-  les encodeurs matériels du téléphone, sait découper, enchaîner images et vidéos, mixer plusieurs pistes audio,
-  appliquer des effets GPU et produire du H.264/AAC ; c'est l'option la plus fiable et maintenue (FFmpeg est plus
-  lourd, plus lent en logiciel et pose des questions de licence).
-* **Composition à deux séquences** : (1) vidéo + son : générique → photos/segments → générique de fin ;
-  (2) audio seul : la musique, répétée pour couvrir toute la durée. Un `AudioProcessor` maison applique
-  l'enveloppe de volume (fondu d'entrée 1 s, fondus de 0,8 s autour des interviews, fondu de sortie 2 s,
-  courbes « smoothstep »). Il connaît le temps exact en comptant les échantillons, sans dépendre des horodatages.
-* **Légendes** : calque GPU (`OverlayEffect` + `BitmapOverlay`) avec fondu de 300 ms.
-* **Aperçu** : rendu 480p par **le même pipeline** que l'export, puis lecture avec ExoPlayer. Ce que vous voyez
-  est donc exactement ce qui sera exporté (musique, coupures, légendes compris). La découpe d'un clip se
-  vérifie instantanément avec « Lire la découpe ».
-* **Aucune permission** : sélecteur de photos système, sélecteur de documents pour la musique,
-  écriture dans MediaStore (autorisée sans permission depuis Android 10).
+* **Export : Media3 Transformer 1.4.1**, la bibliothèque officielle de Google : encodeurs matériels, découpe,
+  enchaînement images/vidéos, mixage de pistes audio, effets GPU, sortie H.264/AAC.
+* **Transitions** : calculées sur chaque élément seul (matrice de couleur pour les fondus, transformation pour le
+  zoom), sans superposer deux vidéos. Le son des interviews suit le fondu ; micro-fondus de 20 ms partout contre les clics.
+  Un vrai « fondu enchaîné » n'est pas proposé : il exigerait de décoder deux vidéos en même temps, ce qui n'est pas
+  fiable sur tous les téléphones.
+* **Musiques** : composées par l'application au premier usage (synthèse sonore en Kotlin), boucles parfaites,
+  même niveau sonore pour les quatre, **aucun droit d'auteur** et aucun fichier audio dans le dépôt.
+* **Projets** : un fichier JSON par projet dans le stockage privé de l'application (écriture atomique) ;
+  l'accès aux médias choisis est conservé de façon permanente. Si un média est supprimé de la galerie,
+  le projet l'indique (« média introuvable ») et l'export explique quoi faire.
+* **YouTube** : API YouTube Data v3, envoi « reprenable » par blocs de 8 Mo (reprise après coupure réseau),
+  WorkManager avec notification (continue si l'application est quittée, attend le Wi-Fi si demandé).
+  Autorisation Google limitée à *envoyer des vidéos* et *voir l'adresse e-mail du compte* : l'application ne peut
+  ni lire, ni modifier, ni supprimer vos vidéos ; aucun mot de passe ni jeton longue durée n'est stocké.
 
-## Hypothèses retenues (modifiables dans le code)
+## Hypothèses retenues
 
-* Android 10 minimum (`minSdk 29`), cible Android 15 (`targetSdk 35`).
-* Sortie **1920×1080, 16:9, H.264 12 Mb/s, AAC** ; les médias verticaux sont centrés avec bandes noires.
-  Images fixes à 30 i/s. Vidéos HDR converties en SDR (H.264 ne transporte pas le HDR proprement).
-* Photo : 4 s par défaut (réglable 2–10 s). Génériques : 4 s (réglables 2–8 s), fond dégradé bleu nuit.
-* Vidéo importée : proposée en « Illustration » si ≤ 30 s, sinon « Interview » (modifiable d'un geste).
-* Son d'origine : **coupé** sur les illustrations (la musique les accompagne), **conservé** sur les interviews.
-* Musique pendant les interviews : coupée par défaut, ou atténuée à 12 % (interrupteur).
-* **Musique par défaut** : composée par l'application au premier lancement (boucle de 24 s, Do–La m–Fa–Sol,
-  nappe + basse + arpège), donc **sans aucun droit d'auteur** et sans fichier binaire dans le dépôt.
-  Pour embarquer un autre morceau, voir `DefaultMusicGenerator.kt`.
-* Un logo commun aux deux génériques. Légendes attachées à un clip (elles le suivent si on le déplace).
-* Le projet vit en mémoire pendant la session (pas de sauvegarde de brouillon), pour rester simple.
+* Android 10 minimum ; sortie 1920×1080 16:9, H.264 12 Mb/s, AAC ; médias verticaux centrés avec bandes noires ;
+  vidéos HDR converties en SDR.
+* Photo 4 s par défaut (2–10 s) ; génériques 4 s (2–8 s) ; la date du générique est facultative (il est commun).
+* Vidéo importée proposée en « Illustration » si ≤ 30 s, sinon « Interview » ; son d'origine coupé sur les
+  illustrations, conservé sur les interviews ; musique coupée pendant les interviews (ou atténuée à 12 %).
+* Transition par défaut : Fondu au noir, 0,6 s. Visibilité YouTube par défaut : Privée.
+* La vidéo envoyée sur YouTube est le dernier MP4 exporté du projet : exportez à nouveau après une modification.
 
-## Robustesse mémoire sur les longues vidéos
+## Robustesse mémoire
 
-* Rien n'est chargé entièrement en mémoire : Transformer lit, décode, traite et encode **en flux**, image par image,
-  avec les codecs matériels ; l'audio est traité tampon par tampon.
-* Les photos sont décodées **sous-échantillonnées** (une photo de 50 Mpx n'est jamais décodée en pleine taille),
-  redimensionnées à la taille de sortie, orientation EXIF appliquée, puis écrites en cache une par une.
-* Les génériques et bandeaux sont dessinés une fois ; les bitmaps de légende sont créés à la demande et libérés.
-* Contrôle d'espace libre avant l'export ; écran maintenu allumé pendant le rendu ; `largeHeap` activé ;
-  les erreurs (y compris mémoire insuffisante) sont affichées avec un bouton « Réessayer ».
-* Limite connue : l'export tourne dans l'application ; si vous la quittez longtemps, Android peut l'interrompre.
+Traitement en flux image par image (codecs matériels), audio tampon par tampon, photos décodées
+sous-échantillonnées, bitmaps libérés au fil de l'eau ; envoi YouTube lu par blocs depuis la galerie ;
+contrôle d'espace libre avant l'export ; écran maintenu allumé pendant le rendu.
 
-## Structure
+---
 
-```
-MonMontage/
-├─ .github/workflows/build-apk.yml   (optionnel : APK compilé par GitHub)
-├─ .gitignore
-├─ build.gradle.kts / settings.gradle.kts / gradle.properties
-├─ gradlew, gradlew.bat, gradle/wrapper/
-└─ app/
-   ├─ build.gradle.kts
-   └─ src/main/
-      ├─ AndroidManifest.xml
-      ├─ res/ (icône, thème, chaînes)
-      └─ java/com/monmontage/app/
-         ├─ MainActivity.kt                 navigation entre écrans
-         ├─ model/Models.kt                 projet, clips, segments, légendes, opérations de découpe
-         ├─ render/
-         │  ├─ TimelinePlanner.kt           projet → timeline à plat (source unique)
-         │  ├─ CompositionFactory.kt        timeline → Composition Media3
-         │  ├─ VideoRenderer.kt             Transformer H.264/AAC + progression + annulation
-         │  ├─ MusicEnvelope.kt             courbe de volume (fondus, interviews)
-         │  ├─ GainEnvelopeProcessor.kt     application du volume sur le PCM
-         │  ├─ CaptionOverlay.kt            bandeau JT en calque GPU
-         │  ├─ Painter.kt                   dessin des génériques et bandeaux
-         │  ├─ ProjectPreparer.kt           préparation (photos, génériques, musique, espace disque)
-         │  ├─ DefaultMusicGenerator.kt     musique par défaut libre de droits
-         │  ├─ MediaUtils.kt / GallerySaver.kt
-         └─ ui/  (ViewModel, thème et icônes, composants, écrans)
-```
+## 1. Créer une clé de signature fixe (indispensable pour YouTube)
 
-## 1. Mettre le projet sur GitHub
-
-```bash
-cd MonMontage
-git init
-git add .
-git commit -m "Mon Montage : première version"
-git branch -M main
-git remote add origin https://github.com/<votre-compte>/MonMontage.git
-git push -u origin main
-```
-Le `.gitignore` exclut `build/`, `.gradle/`, `local.properties`, les APK et **tous les fichiers de signature**
-(`*.jks`, `*.keystore`, `keystore.properties`).
-
-## 2. Cloner et compiler en local
-
-Prérequis : **Android Studio** récent (Ladybug ou plus) — il fournit le JDK 17 et le SDK Android.
-
-```bash
-git clone https://github.com/<votre-compte>/MonMontage.git
-```
-* **Avec Android Studio** : *File › Open* sur le dossier, attendre la synchronisation Gradle,
-  puis *Build › Build App Bundle(s) / APK(s) › Build APK(s)*.
-* **En ligne de commande** (le SDK doit être indiqué dans `local.properties` : `sdk.dir=/chemin/vers/Android/Sdk`,
-  Android Studio le crée automatiquement) :
-  ```bash
-  ./gradlew assembleDebug          # Windows : gradlew.bat assembleDebug
-  ```
-  APK produit : `app/build/outputs/apk/debug/app-debug.apk`
-
-## 3. (Recommandé pour un usage durable) APK release signé
+Google reconnaît l'application à l'empreinte SHA-1 de la clé qui la signe. Sans clé fixe, chaque compilation
+GitHub utilise une clé différente et la connexion YouTube échoue.
 
 ```bash
 keytool -genkeypair -v -keystore monmontage.jks -alias monmontage -keyalg RSA -keysize 2048 -validity 10000
 ```
-Créez à la racine un fichier `keystore.properties` (**jamais versionné**) :
+(`keytool` est fourni avec Java / Android Studio. Notez le mot de passe choisi.)
+Gardez `monmontage.jks` en lieu sûr, **hors du dépôt** (le `.gitignore` l'exclut).
+
+Afficher l'empreinte SHA-1 (à copier pour l'étape 3) :
+```bash
+keytool -list -v -keystore monmontage.jks -alias monmontage
+```
+
+## 2. Donner la clé à GitHub (secrets du dépôt)
+
+Convertir la clé en texte :
+* Mac / Linux : `base64 -i monmontage.jks | tr -d '\n' > cle.txt`
+* Windows (PowerShell) : `[Convert]::ToBase64String([IO.File]::ReadAllBytes("monmontage.jks")) > cle.txt`
+
+Sur GitHub : dépôt › **Settings › Secrets and variables › Actions › New repository secret**, créez :
+
+| Nom | Valeur |
+|-----|--------|
+| `KEYSTORE_BASE64` | le contenu de `cle.txt` |
+| `KEYSTORE_PASSWORD` | le mot de passe de la clé |
+| `KEY_ALIAS` | `monmontage` |
+| `KEY_PASSWORD` | le même mot de passe (sauf si vous en avez choisi un autre pour l'alias) |
+
+Supprimez ensuite `cle.txt`. Les APK compilés par GitHub seront désormais tous signés avec cette clé.
+Pour compiler en local avec la même clé : créez à la racine un `keystore.properties` (non versionné) :
 ```
 storeFile=monmontage.jks
 storePassword=VOTRE_MOT_DE_PASSE
 keyAlias=monmontage
 keyPassword=VOTRE_MOT_DE_PASSE
 ```
-puis :
-```bash
-./gradlew assembleRelease
-```
-APK : `app/build/outputs/apk/release/app-release.apk`. Conservez précieusement le `.jks` : il faut la même clé
-pour installer les mises à jour par-dessus. (Un APK debug convient parfaitement pour un usage personnel.)
 
-## 4. Installer l'APK sur le téléphone
+## 3. Déclarer l'application chez Google (une seule fois, gratuit)
 
-**Par transfert de fichier**
-1. Copiez l'APK sur le téléphone (câble USB, Google Drive, e-mail…).
-2. Ouvrez-le depuis l'application *Fichiers*.
-3. Android demande d'autoriser l'installation depuis cette source : *Paramètres › Autoriser cette source*
-   (menu « Installer des applis inconnues »), revenez, puis *Installer*.
-4. Si Play Protect affiche un avertissement, choisissez *Installer quand même* (application non publiée sur le Play Store).
+1. Ouvrez la console Google Cloud (console.cloud.google.com), créez un projet « Mon Montage ».
+2. **API et services › Bibliothèque** : cherchez **YouTube Data API v3** › **Activer**.
+3. **Google Auth Platform** (écran de consentement OAuth) :
+   * **Branding** : nom de l'application, e-mail d'assistance ;
+   * **Audience** : type **Externe**, puis ajoutez votre adresse Gmail dans **Utilisateurs test** ;
+   * **Accès aux données** : ajoutez les champs d'application `.../auth/youtube.upload` et `.../auth/userinfo.email`.
+4. **Clients › Créer un client › Android** : nom du paquet `com.monmontage.app`, empreinte **SHA-1** de l'étape 1.
 
-**Par câble avec ADB** (options développeur et débogage USB activés) :
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+Aucune clé ni identifiant n'est à copier dans le code : Google associe automatiquement l'application signée
+(nom de paquet + SHA-1) à ce client.
 
-## 5. (Optionnel) APK compilé par GitHub Actions
+**Mode test** : tant que l'application reste « en test » chez Google, seuls les comptes ajoutés comme testeurs
+peuvent se connecter, et Google peut redemander l'autorisation environ chaque semaine (un écran, un geste).
+Pour l'éviter, dans **Audience**, cliquez sur **Publier l'application** (passage en production sans validation) :
+Google affichera alors un avertissement « application non validée » à la connexion, à accepter via
+*Paramètres avancés › Accéder à Mon Montage* — acceptable pour un usage personnel.
 
-Le workflow `.github/workflows/build-apk.yml` compile l'APK debug à chaque `push` sur `main`
-(ou à la demande via l'onglet *Actions › Build APK (debug) › Run workflow*). L'APK se télécharge
-dans la section *Artifacts* de l'exécution (fichier zip contenant `app-debug.apk`).
+Quotas : l'envoi de vidéos dispose de son propre quota (100 envois par jour par défaut), largement suffisant.
 
-## 6. Tester l'export (checklist)
+## 4. Compiler et installer
 
-1. Ajoutez 2 photos, 1 vidéo courte (Illustration) et 1 vidéo plus longue (Interview).
-2. Sur l'interview : *Scinder ici* au milieu, supprimez un segment, *Lire la découpe*.
-3. Ajoutez une légende sur l'interview (nom + fonction), apparition à 1 s.
-4. Remplissez les génériques et choisissez un logo.
-5. *Aperçu* : vérifiez l'ordre, les coupes, le bandeau, et que la musique **s'efface avant l'interview
-   puis revient en douceur après**.
-6. *Exporter* : la progression s'affiche ; à la fin, la vidéo est dans *Galerie › Films/MonMontage*.
-7. *Partager* → YouTube, ou vérifiez le fichier sur ordinateur (`ffprobe montage.mp4` doit indiquer `h264` et `aac`).
+1. Envoyez le projet sur GitHub (commit + push) : l'onglet **Actions** compile l'APK automatiquement.
+2. Téléchargez **MonMontage-debug-apk** dans *Artifacts*, décompressez-le.
+3. **Si une version précédente signée avec une autre clé est installée, désinstallez-la d'abord**
+   (Android refuse une mise à jour signée différemment). ⚠️ Cela efface les projets enregistrés dans l'application ;
+   les vidéos exportées restent dans la galerie.
+4. Installez `app-debug.apk` depuis l'application Fichiers (autoriser cette source si demandé).
 
-En cas d'échec, le message affiché et les journaux (`adb logcat -s MonMontage`) indiquent la cause.
+Compilation locale : ouvrez le dossier dans Android Studio, ou `./gradlew assembleDebug`
+(APK : `app/build/outputs/apk/debug/app-debug.apk`).
+
+## 5. Tester
+
+1. **Mes projets › Nouveau projet** ; ajoutez photos et vidéos ; renommez le projet en touchant son titre.
+2. Choisissez une musique (écoutez les 4 styles), une transition, puis **Aperçu**.
+3. **Exporter** : la vidéo arrive dans *Galerie › Films/MonMontage*.
+4. **Publier sur YouTube** : connexion la première fois, puis titre, visibilité **Privée** pour le premier essai,
+   **Publier**. Quittez l'application : la notification montre la progression.
+5. Revenez à **Mes projets** : le projet porte le badge « Sur YouTube ». Rouvrez-le : tout est conservé.
+
+Problème de connexion Google « configuration incomplète » : vérifiez le nom de paquet et la SHA-1 (étape 3),
+et que l'APK installé vient bien d'une compilation signée avec la clé fixe.
+Journaux : `adb logcat -s MonMontage WM-WorkerWrapper`.

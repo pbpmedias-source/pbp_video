@@ -22,6 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,5 +120,23 @@ fun DurationBadge(text: String, modifier: Modifier = Modifier) {
         text, color = Color.White,
         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
         modifier = modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x8C000000)).padding(horizontal = 4.dp, vertical = 1.dp),
+    )
+}
+
+/** Boîte de dialogue « Renommer le projet ». */
+@Composable
+fun RenameDialog(current: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(current) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = com.monmontage.app.ui.theme.AppColors.Surface,
+        title = { Text("Renommer le projet") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text, onValueChange = { text = it.take(80) }, singleLine = true, label = { Text("Nom") },
+            )
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { if (text.isNotBlank()) onConfirm(text.trim()) }) { Text("Renommer") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

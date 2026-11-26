@@ -34,6 +34,7 @@ import com.monmontage.app.ui.RenderState
 import com.monmontage.app.ui.components.FilePlayer
 import com.monmontage.app.ui.components.KeepScreenOn
 import com.monmontage.app.ui.theme.AppColors
+import com.monmontage.app.ui.theme.AppIcons
 import kotlinx.coroutines.delay
 
 /** Anneau de progression façon maquette (indéterminé tant que le pourcentage n'est pas connu). */
@@ -177,7 +178,7 @@ private fun FailedBlock(title: String, message: String, onRetry: () -> Unit, onB
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-fun ExportScreen(vm: MontageViewModel, onBack: () -> Unit) {
+fun ExportScreen(vm: MontageViewModel, onBack: () -> Unit, onYouTube: () -> Unit) {
     val state by vm.exportState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmCancel by remember { mutableStateOf(false) }
@@ -226,8 +227,14 @@ fun ExportScreen(vm: MontageViewModel, onBack: () -> Unit) {
                     Text("Galerie › Films/${GallerySaver.FOLDER}/${s.fileName}", textAlign = TextAlign.Center, color = AppColors.Muted)
                     Text("MP4 · H.264 1920×1080 · AAC — prêt pour YouTube.", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
                     Spacer(Modifier.weight(1f))
-                    Button(
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                    Button(onClick = onYouTube, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                        Icon(AppIcons.YouTube, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Publier sur YouTube")
+                    }
+                    OutlinedButton(
+                        border = BorderStroke(1.dp, AppColors.Outline),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         onClick = {
                             val send = Intent(Intent.ACTION_SEND).apply {
                                 type = "video/mp4"
@@ -236,7 +243,7 @@ fun ExportScreen(vm: MontageViewModel, onBack: () -> Unit) {
                             }
                             context.startActivity(Intent.createChooser(send, "Envoyer la vidéo (YouTube…)"))
                         },
-                    ) { Text("Partager / envoyer sur YouTube") }
+                    ) { Text("Partager…", color = AppColors.OnSurface) }
                     OutlinedButton(
                         border = BorderStroke(1.dp, AppColors.Outline), modifier = Modifier.fillMaxWidth().height(48.dp),
                         onClick = {

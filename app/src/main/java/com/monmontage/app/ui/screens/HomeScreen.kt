@@ -10,15 +10,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,6 +36,7 @@ import com.monmontage.app.ui.components.DurationBadge
 import com.monmontage.app.ui.components.IconTile
 import com.monmontage.app.ui.components.MediaThumbnail
 import com.monmontage.app.ui.components.TypeTag
+import com.monmontage.app.ui.components.RenameDialog
 import com.monmontage.app.ui.theme.AppColors
 import com.monmontage.app.ui.theme.AppIcons
 import kotlin.math.roundToInt
@@ -50,16 +51,20 @@ fun HomeScreen(
     onEditTitle: () -> Unit,
     onEditEnd: () -> Unit,
     onMusic: () -> Unit,
+    onTransitions: () -> Unit,
     onPreview: () -> Unit,
     onExport: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val project by vm.project.collectAsStateWithLifecycle()
+    val branding by vm.branding.collectAsStateWithLifecycle()
+    var renaming by remember { mutableStateOf(false) }
     val busy by vm.busy.collectAsStateWithLifecycle()
     // Sélecteur de photos système : aucune permission de stockage nécessaire.
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(50)) { uris ->
         vm.addMedia(uris)
     }
-    val totalMs = remember(project) { TimelinePlanner.plan(project).totalMs }
+    val totalMs = remember(project, branding) { TimelinePlanner.plan(project, branding).totalMs }
     val hasClips = project.clips.isNotEmpty()
 
     Scaffold(
@@ -67,15 +72,18 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.Background),
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour à mes projets") }
+                },
                 title = {
-                    Column {
-                        Text("Mon Montage", style = MaterialTheme.typography.headlineSmall)
-                        Text("Durée totale · ${formatMs(totalMs)}", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+                    Column(Modifier.clickable(onClickLabel = "Renommer le projet") { renaming = true }) {
+                        Text(project.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${formatMs(totalMs).substringBeforeLast('.')} · enregistré automatiquement", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
                     }
                 },
                 actions = {
-                    TextButton(onClick = onPreview, enabled = hasClips) { Text("Aperçu", color = if (hasClips) AppColors.Link else AppColors.Muted) }
-                    Button(onClick = onExport, enabled = hasClips, modifier = Modifier.padding(end = 8.dp).height(44.dp)) {
+                    TextButton(onClick = onPreview, enabled = hasClips, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Aperçu", color = if (hasClips) AppColors.Link else AppColors.Muted) }
+                    Button(onClick = onExport, enabled = hasClips, modifier = Modifier.padding(end = 8.dp).height(44.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
                         Text("Exporter")
                     }
                 },
@@ -103,10 +111,10 @@ fun HomeScreen(
         ) {
             if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             item {
-                val t = project.titleCard
+                val t = branding.titleCard
                 SectionCard(
                     AppIcons.Title, AppColors.TitleBg, AppColors.Link, "Générique de début",
-                    if (t.enabled) "${t.title.ifBlank { "(sans titre)" }} · ${t.durationMs / 1000} s" else "Désactivé",
+                    if (t.enabled) "Commun à tous les projets · ${t.durationMs / 1000} s" else "Désactivé",
                     onEditTitle,
                 )
             }
@@ -135,21 +143,39 @@ fun HomeScreen(
                 )
             }
             item {
-                val e = project.endCard
+                val e = branding.endCard
                 SectionCard(
                     AppIcons.Lines, AppColors.TitleBg, AppColors.Link, "Générique de fin",
-                    if (e.enabled) "${e.mainText.ifBlank { "(vide)" }} · ${e.durationMs / 1000} s" else "Désactivé",
+                    if (e.enabled) "Commun à tous les projets · ${e.durationMs / 1000} s" else "Désactivé",
                     onEditEnd,
                 )
             }
             item {
-                val m = project.music
-                SectionCard(
-                    AppIcons.Music, AppColors.MusicBg, AppColors.Music, "Musique de fond",
-                    (if (m.uri == null) "Par défaut" else m.displayName) + " · ${(m.volume * 100).roundToInt()} % · " +
-                        if (m.muteDuringInterviews) "coupée en interview" else "atténuée en interview",
-                    onMusic,
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    TileCard(
+                        AppIcons.Music, AppColors.MusicBg, AppColors.Music, "Musique",
+                        "${project.music.label} · ${(project.music.volume * 100).roundToInt()} %", onMusic, Modifier.weight(1f),
+                    )
+                    TileCard(
+                        AppIcons.Transition, Color(0xFF2A3550), AppColors.Link, "Transitions",
+                        project.transition.style.label, onTransitions, Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+
+    if (renaming) RenameDialog(project.name, onDismiss = { renaming = false }) { vm.renameCurrent(it); renaming = false }
+}
+
+@Composable
+private fun TileCard(icon: ImageVector, tileBg: Color, tint: Color, title: String, subtitle: String, onClick: () -> Unit, modifier: Modifier) {
+    Card(onClick = onClick, shape = CardShape, colors = CardDefaults.cardColors(containerColor = AppColors.Surface), modifier = modifier) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            IconTile(icon, tileBg, tint, size = 36.dp)
+            Column {
+                Text(title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

@@ -39,17 +39,17 @@ import kotlin.math.roundToInt
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit) {
-    val project by vm.project.collectAsStateWithLifecycle()
+    val branding by vm.branding.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.setLogo(uri)
     }
-    val logoUri = project.logoUri
+    val logoUri = branding.logoUri
     val logo by produceState<Bitmap?>(null, logoUri) {
         value = logoUri?.let { u -> withContext(Dispatchers.IO) { runCatching { MediaUtils.decodeBitmap(context, u, 640, 360) }.getOrNull() } }
     }
-    val title = project.titleCard
-    val end = project.endCard
+    val title = branding.titleCard
+    val end = branding.endCard
     val preview by produceState<ImageBitmap?>(null, title, end, logo, isTitle) {
         delay(120) // évite de redessiner à chaque frappe
         value = withContext(Dispatchers.Default) {
@@ -60,7 +60,12 @@ fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isTitle) "Générique de début" else "Générique de fin") },
+                title = {
+                    Column {
+                        Text(if (isTitle) "Générique de début" else "Générique de fin")
+                        Text("Commun à tous vos projets", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+                    }
+                },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } },
             )
         },
@@ -83,7 +88,7 @@ fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit)
                 Field("Titre", title.title) { vm.setTitleCard(title.copy(title = it)) }
                 Field("Sous-titre", title.subtitle) { vm.setTitleCard(title.copy(subtitle = it)) }
                 Field("Auteur", title.author) { vm.setTitleCard(title.copy(author = it)) }
-                Field("Date", title.date) { vm.setTitleCard(title.copy(date = it)) }
+                Field("Date (facultative, masquée si vide)", title.date) { vm.setTitleCard(title.copy(date = it)) }
             } else {
                 Field("Texte principal", end.mainText) { vm.setEndCard(end.copy(mainText = it)) }
                 Field("Texte secondaire", end.secondaryText) { vm.setEndCard(end.copy(secondaryText = it)) }

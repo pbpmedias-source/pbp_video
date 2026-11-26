@@ -4,8 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.StatFs
+import com.monmontage.app.model.Branding
 import com.monmontage.app.model.MusicSettings
 import com.monmontage.app.model.Project
+import com.monmontage.app.model.TransitionSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -27,27 +29,37 @@ data class PreparedProject(
     val musicUri: Uri,
     val musicDurationMs: Long,
     val music: MusicSettings,
+    val transition: TransitionSettings,
 )
 
 class ProjectPreparer(private val context: Context) {
 
-    suspend fun prepare(project: Project, spec: OutputSpec, onStep: (String) -> Unit): PreparedProject =
+    suspend fun prepare(project: Project, branding: Branding, spec: OutputSpec, onStep: (String) -> Unit): PreparedProject =
         withContext(Dispatchers.IO) {
-            val timeline = TimelinePlanner.plan(project)
+            val timeline = TimelinePlanner.plan(project, branding)
             require(timeline.items.any { it is TimelineItem.PhotoItem || it is TimelineItem.VideoItem }) {
                 "Ajoutez au moins une photo ou une vidéo (ou vérifiez qu'il reste un segment)."
             }
             val dir = File(context.cacheDir, "render").apply { mkdirs() }
 
+            // Médias supprimés de la galerie depuis la création du projet : on le dit clairement.
+            val missing = project.clips.filter { clip ->
+                runCatching { context.contentResolver.openFileDescriptor(clip.uri, "r")?.use { true } ?: false }.getOrDefault(false).not()
+            }
+            require(missing.isEmpty()) {
+                "Média introuvable : " + missing.joinToString { it.displayName } +
+                    ". Retirez-le du montage ou remplacez-le."
+            }
+
             onStep("Préparation des génériques…")
-            val logo = project.logoUri?.let { uri ->
+            val logo = branding.logoUri?.let { uri ->
                 runCatching { MediaUtils.decodeBitmap(context, uri, spec.width / 2, spec.height / 2) }.getOrNull()
             }
-            val titleFile = if (project.titleCard.enabled)
-                writePng(Painter.renderTitleCard(spec.width, spec.height, project.titleCard, logo), File(dir, "title_${spec.height}.png"))
+            val titleFile = if (branding.titleCard.enabled)
+                writePng(Painter.renderTitleCard(spec.width, spec.height, branding.titleCard, logo), File(dir, "title_${spec.height}.png"))
             else null
-            val endFile = if (project.endCard.enabled)
-                writePng(Painter.renderEndCard(spec.width, spec.height, project.endCard, logo), File(dir, "end_${spec.height}.png"))
+            val endFile = if (branding.endCard.enabled)
+                writePng(Painter.renderEndCard(spec.width, spec.height, branding.endCard, logo), File(dir, "end_${spec.height}.png"))
             else null
             logo?.recycle()
 
@@ -64,16 +76,17 @@ class ProjectPreparer(private val context: Context) {
             }
 
             onStep("Préparation de la musique…")
-            val (musicUri, musicMs) = if (project.music.uri == null) {
-                Uri.fromFile(DefaultMusicGenerator.ensure(context)) to DefaultMusicGenerator.DURATION_MS
+            val custom = project.music.customUri
+            val (musicUri, musicMs) = if (custom == null) {
+                Uri.fromFile(MusicLibrary.ensure(context, project.music.track)) to MusicLibrary.durationMs(project.music.track)
             } else {
-                val d = MediaUtils.durationMs(context, project.music.uri)
-                require(d >= 1000) { "La musique importée est illisible. Choisissez-en une autre ou revenez à la musique par défaut." }
-                project.music.uri to d
+                val d = MediaUtils.durationMs(context, custom)
+                require(d >= 1000) { "La musique importée est illisible. Choisissez-en une autre dans la liste." }
+                custom to d
             }
 
             ensureFreeSpace(dir, timeline.totalMs, spec)
-            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music)
+            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music, project.transition)
         }
 
     private fun writePng(bitmap: Bitmap, file: File): File {

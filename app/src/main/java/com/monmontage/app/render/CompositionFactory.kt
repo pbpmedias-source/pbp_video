@@ -15,6 +15,7 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import com.google.common.collect.ImmutableList
 import com.monmontage.app.model.ClipType
+import com.monmontage.app.model.TransitionStyle
 import java.io.File
 import kotlin.math.min
 
@@ -34,18 +35,28 @@ object CompositionFactory {
         // Chaque élément est mis à l'échelle (bandes noires si besoin) dans le cadre 16:9 de sortie.
         val presentation = Presentation.createForWidthAndHeight(spec.width, spec.height, Presentation.LAYOUT_SCALE_TO_FIT)
 
-        val videoItems = timeline.items.map { item ->
+        val count = timeline.items.size
+        val videoItems = timeline.items.mapIndexed { index, item ->
+            // Ordre des effets : mise à l'échelle → zoom d'entrée → bandeau → fondu (le bandeau fond avec l'image).
+            val transition = TransitionEffects.videoEffects(prepared.transition, index, count, item.durationMs)
+            val isZoom = prepared.transition.style == TransitionStyle.ZOOM
+            fun effects(captions: List<LocalCaption>): List<Effect> = buildList {
+                add(presentation)
+                if (isZoom) addAll(transition)
+                addAll(captionEffects(captions, spec))
+                if (!isZoom) addAll(transition)
+            }
             when (item) {
                 is TimelineItem.TitleCardItem ->
-                    imageItem(requireNotNull(prepared.titleCardFile), MimeTypes.IMAGE_PNG, item.durationMs, listOf(presentation))
+                    imageItem(requireNotNull(prepared.titleCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.EndCardItem ->
-                    imageItem(requireNotNull(prepared.endCardFile), MimeTypes.IMAGE_PNG, item.durationMs, listOf(presentation))
+                    imageItem(requireNotNull(prepared.endCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.PhotoItem ->
-                    imageItem(
-                        prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs,
-                        listOf<Effect>(presentation) + captionEffects(item.captions, spec),
-                    )
-                is TimelineItem.VideoItem -> videoItem(item, presentation, spec)
+                    imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions))
+                is TimelineItem.VideoItem -> {
+                    val gain = TransitionEffects.audioGain(prepared.transition, index, count, item.durationMs)
+                    videoItem(item, effects(item.captions), gain)
+                }
             }
         }
 
@@ -73,7 +84,7 @@ object CompositionFactory {
             .build()
     }
 
-    private fun videoItem(item: TimelineItem.VideoItem, presentation: Presentation, spec: OutputSpec): EditedMediaItem {
+    private fun videoItem(item: TimelineItem.VideoItem, video: List<Effect>, gain: (Long) -> Float): EditedMediaItem {
         val mediaItem = MediaItem.Builder()
             .setUri(item.clip.uri)
             .setClippingConfiguration(
@@ -84,10 +95,10 @@ object CompositionFactory {
             )
             .build()
         // Hypothèse : le son d'origine des vidéos d'illustration est coupé (la musique les accompagne),
-        // celui des interviews est conservé à 100 %.
+        // celui des interviews est conservé, avec des fondus aux bords selon la transition.
         val audio: List<AudioProcessor> =
-            if (item.clip.type == ClipType.ILLUSTRATION) listOf(GainEnvelopeProcessor(0) { 0f }) else emptyList()
-        val video = listOf<Effect>(presentation) + captionEffects(item.captions, spec)
+            if (item.clip.type == ClipType.ILLUSTRATION) listOf(GainEnvelopeProcessor(0) { 0f })
+            else listOf(GainEnvelopeProcessor(0, gain))
         return EditedMediaItem.Builder(mediaItem).setEffects(Effects(audio, video)).build()
     }
 

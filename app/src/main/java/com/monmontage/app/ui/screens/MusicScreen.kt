@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,41 +35,47 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.monmontage.app.model.Branding
 import com.monmontage.app.model.ClipType
+import com.monmontage.app.model.MusicTrack
 import com.monmontage.app.model.Project
-import com.monmontage.app.render.DefaultMusicGenerator
 import com.monmontage.app.render.MusicEnvelope
 import com.monmontage.app.render.TimelineItem
 import com.monmontage.app.render.TimelinePlanner
 import com.monmontage.app.ui.MontageViewModel
-import com.monmontage.app.ui.components.IconTile
 import com.monmontage.app.ui.theme.AppColors
 import com.monmontage.app.ui.theme.AppIcons
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun MusicScreen(vm: MontageViewModel, onBack: () -> Unit) {
     val project by vm.project.collectAsStateWithLifecycle()
+    val branding by vm.branding.collectAsStateWithLifecycle()
     val music = project.music
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.setMusic(uri)
+        if (uri != null) vm.setCustomMusic(uri)
     }
 
     val player = remember { ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE } }
     DisposableEffect(player) { onDispose { player.release() } }
-    var playing by remember { mutableStateOf(false) }
-    val playableUri by produceState<Uri?>(null, music.uri) {
-        value = music.uri ?: withContext(Dispatchers.IO) { Uri.fromFile(DefaultMusicGenerator.ensure(context)) }
-    }
-    LaunchedEffect(playableUri) {
-        player.stop(); playing = false
-        playableUri?.let { player.setMediaItem(MediaItem.fromUri(it)); player.prepare() }
-    }
+    /** Clé de ce qui est en écoute : id du morceau ou « custom ». */
+    var playingKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(music.volume) { player.volume = music.volume }
+
+    fun toggle(key: String, uri: suspend () -> Uri) {
+        if (playingKey == key) { player.pause(); playingKey = null; return }
+        playingKey = key
+        scope.launch {
+            player.setMediaItem(MediaItem.fromUri(uri()))
+            player.prepare()
+            player.play()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -82,37 +89,34 @@ fun MusicScreen(vm: MontageViewModel, onBack: () -> Unit) {
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AppColors.Surface)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconTile(AppIcons.Music, AppColors.MusicBg, AppColors.Music, size = 52.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text("Musique actuelle", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
-                            Text(
-                                if (music.uri == null) "Musique par défaut" else music.displayName,
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1,
-                            )
-                            Text(
-                                if (music.uri == null) "Libre de droits · boucle de 24 s" else "Importée depuis le téléphone",
-                                style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            enabled = playableUri != null, modifier = Modifier.weight(1f).height(44.dp),
-                            onClick = { if (playing) player.pause() else player.play(); playing = !playing },
-                        ) {
-                            Icon(if (playing) AppIcons.Pause else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (playing) "Arrêter" else "Écouter")
-                        }
-                        OutlinedButton(
-                            onClick = { importer.launch(arrayOf("audio/*")) },
-                            border = BorderStroke(1.dp, AppColors.Outline), modifier = Modifier.weight(1f).height(44.dp),
-                        ) { Text("Importer…", color = AppColors.OnSurface) }
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Choisir une musique · libres de droits", style = MaterialTheme.typography.labelLarge, color = AppColors.Muted)
+                MusicTrack.entries.forEach { track ->
+                    TrackRow(
+                        title = track.label, subtitle = track.description,
+                        selected = music.customUri == null && music.track == track,
+                        playing = playingKey == track.id,
+                        onSelect = { vm.setMusicTrack(track) },
+                        onPlay = { toggle(track.id) { vm.musicFile(track) } },
+                    )
+                }
+                val custom = music.customUri
+                if (custom != null) {
+                    TrackRow(
+                        title = music.customName.ifBlank { "Musique importée" }, subtitle = "Importée depuis le téléphone",
+                        selected = true, playing = playingKey == "custom",
+                        onSelect = {}, onPlay = { toggle("custom") { custom } },
+                    )
+                }
+                OutlinedButton(
+                    onClick = { importer.launch(arrayOf("audio/*")) },
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, AppColors.Outline),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, tint = AppColors.OnSurface, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Importer une musique du téléphone", color = AppColors.OnSurface)
                 }
             }
 
@@ -139,16 +143,42 @@ fun MusicScreen(vm: MontageViewModel, onBack: () -> Unit) {
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Volume de la musique sur votre montage", style = MaterialTheme.typography.titleSmall)
-                    MusicEnvelopeChart(project)
+                    MusicEnvelopeChart(project, branding)
                     Text(
                         "Fondus de 0,8 s : la musique s'efface juste avant que la voix commence et revient après. " +
-                            "Fondu d'entrée et de sortie au début et à la fin.",
+                            "Elle est répétée si elle est plus courte que le montage.",
                         style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
                     )
                 }
             }
+        }
+    }
+}
 
-            if (music.uri != null) TextButton(onClick = vm::resetMusic) { Text("Revenir à la musique par défaut", color = AppColors.Link) }
+@Composable
+private fun TrackRow(title: String, subtitle: String, selected: Boolean, playing: Boolean, onSelect: () -> Unit, onPlay: () -> Unit) {
+    Surface(
+        onClick = onSelect,
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) AppColors.SurfaceHigh else AppColors.Surface,
+        border = if (selected) BorderStroke(2.dp, AppColors.Accent) else null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = onSelect)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppColors.Muted, maxLines = 1)
+            }
+            FilledIconButton(
+                onClick = onPlay,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = if (playing) AppColors.Accent else AppColors.Track,
+                    contentColor = if (playing) AppColors.OnAccent else AppColors.OnSurface,
+                ),
+            ) {
+                Icon(if (playing) AppIcons.Pause else Icons.Default.PlayArrow, if (playing) "Arrêter l'écoute" else "Écouter $title", Modifier.size(18.dp))
+            }
         }
     }
 }
@@ -158,9 +188,9 @@ fun MusicScreen(vm: MontageViewModel, onBack: () -> Unit) {
  * la frise dessous montre les éléments (bleu : génériques et illustrations, ambre : photos, orange : interviews).
  */
 @Composable
-private fun MusicEnvelopeChart(project: Project) {
-    val data = remember(project) {
-        val timeline = TimelinePlanner.plan(project)
+private fun MusicEnvelopeChart(project: Project, branding: Branding) {
+    val data = remember(project, branding) {
+        val timeline = TimelinePlanner.plan(project, branding)
         val env = MusicEnvelope(
             timeline.interviewRanges, timeline.totalMs, 1f,
             if (project.music.muteDuringInterviews) 0f else 0.12f,

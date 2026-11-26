@@ -59,4 +59,28 @@ object AppIcons {
             path(fill = SolidColor(Color.Black)) { moveTo(13f, 5f); lineTo(17f, 5f); lineTo(17f, 19f); lineTo(13f, 19f); close() }
         }
     }
+
+    val Transition: ImageVector by lazy {
+        icon("Transition") {
+            stroke { moveTo(4.5f, 6f); lineTo(9.5f, 6f); quadTo(11f, 6f, 11f, 7.5f); lineTo(11f, 16.5f); quadTo(11f, 18f, 9.5f, 18f); lineTo(4.5f, 18f); quadTo(3f, 18f, 3f, 16.5f); lineTo(3f, 7.5f); quadTo(3f, 6f, 4.5f, 6f); close() }
+            stroke { moveTo(14.5f, 6f); lineTo(19.5f, 6f); quadTo(21f, 6f, 21f, 7.5f); lineTo(21f, 16.5f); quadTo(21f, 18f, 19.5f, 18f); lineTo(14.5f, 18f); quadTo(13f, 18f, 13f, 16.5f); lineTo(13f, 7.5f); quadTo(13f, 6f, 14.5f, 6f); close() }
+        }
+    }
+
+    val YouTube: ImageVector by lazy {
+        icon("YouTube") {
+            stroke { moveTo(6f, 5f); lineTo(18f, 5f); quadTo(22f, 5f, 22f, 9f); lineTo(22f, 15f); quadTo(22f, 19f, 18f, 19f); lineTo(6f, 19f); quadTo(2f, 19f, 2f, 15f); lineTo(2f, 9f); quadTo(2f, 5f, 6f, 5f); close() }
+            path(fill = SolidColor(Color.Black)) { moveTo(10f, 9.5f); lineTo(14.5f, 12f); lineTo(10f, 14.5f); close() }
+        }
+    }
+
+    val More: ImageVector by lazy {
+        icon("More") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 3f); arcToRelative(2f, 2f, 0f, true, true, 0f, 4f); arcToRelative(2f, 2f, 0f, true, true, 0f, -4f)
+                moveTo(12f, 10f); arcToRelative(2f, 2f, 0f, true, true, 0f, 4f); arcToRelative(2f, 2f, 0f, true, true, 0f, -4f)
+                moveTo(12f, 17f); arcToRelative(2f, 2f, 0f, true, true, 0f, 4f); arcToRelative(2f, 2f, 0f, true, true, 0f, -4f)
+            }
+        }
+    }
 }
