@@ -233,6 +233,7 @@ private fun ClipRow(
                 val details = buildList {
                     if (clip.isVideo && clip.segments.size > 1) add("${clip.segments.size} segments")
                     if (clip.captions.isNotEmpty()) add("${clip.captions.size} légende(s)")
+                    if (clip.showLogo) add("logo")
                 }
                 if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = AppColors.Muted)
             }

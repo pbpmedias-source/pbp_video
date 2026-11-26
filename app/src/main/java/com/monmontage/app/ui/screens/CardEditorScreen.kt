@@ -196,13 +196,10 @@ fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit)
                 }
             }
             if (branding.logoUri != null) TextButton(onClick = { vm.setLogo(null) }) { Text("Revenir au logo PBP Médias", color = AppColors.Link) }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Logo en miniature sur les images")
-                    Text("En bas à droite de chaque photo et rush de ce projet", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
-                }
-                Switch(checked = project.logoWatermark, onCheckedChange = vm::setLogoWatermark)
-            }
+            Text(
+                "Le logo en miniature se règle média par média, à côté des légendes (toucher un média dans le montage).",
+                style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
+            )
             Spacer(Modifier.height(16.dp))
         }
     }

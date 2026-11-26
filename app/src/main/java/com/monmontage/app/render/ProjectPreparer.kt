@@ -67,7 +67,7 @@ class ProjectPreparer(private val context: Context) {
                 writePng(Painter.renderEndCard(context, spec.width, spec.height, project.cardStyle, project.endCard, logo, background), File(dir, "end_${spec.height}.png"))
             else null
             background?.recycle()
-            val watermarkFile = if (project.logoWatermark && logo != null)
+            val watermarkFile = if (project.clips.any { it.showLogo } && logo != null)
                 writePng(Painter.renderWatermark(spec.width, spec.height, logo), File(dir, "watermark_${spec.height}.png"))
             else null
             logo?.recycle()

@@ -258,7 +258,10 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
     fun setTitleCard(card: TitleCard) = _project.update { it.copy(titleCard = card) }
     fun setEndCard(card: EndCard) = _project.update { it.copy(endCard = card) }
     fun setCardStyle(style: CardStyle) = _project.update { it.copy(cardStyle = style) }
-    fun setLogoWatermark(on: Boolean) = _project.update { it.copy(logoWatermark = on) }
+    fun setClipLogo(id: Long, on: Boolean) = _project.update { p ->
+        p.copy(clips = p.clips.map { if (it.id == id) it.copy(showLogo = on) else it })
+    }
+    fun setLogoOnAllClips(on: Boolean) = _project.update { p -> p.copy(clips = p.clips.map { it.copy(showLogo = on) }) }
     fun setCardBackground(uri: Uri?) {
         uri?.let(::keepAccess)
         _project.update { it.copy(cardBackgroundUri = uri) }

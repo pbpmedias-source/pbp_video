@@ -94,7 +94,7 @@ class ProjectRepository(private val context: Context) {
             put("credits", e.credits); put("durationMs", e.durationMs)
         })
         p.cardBackgroundUri?.let { put("cardBackground", it.toString()) }
-        put("logoWatermark", p.logoWatermark)
+
         p.lastExport?.let { x ->
             put("export", JSONObject().apply {
                 put("uri", x.uri.toString()); put("fileName", x.fileName); put("at", x.exportedAt); put("durationMs", x.durationMs)
@@ -106,6 +106,7 @@ class ProjectRepository(private val context: Context) {
     private fun clipToJson(c: Clip) = JSONObject().apply {
         put("id", c.id); put("uri", c.uri.toString()); put("mime", c.mimeType); put("type", c.type.name)
         put("name", c.displayName); put("sourceMs", c.sourceDurationMs); put("photoMs", c.photoDurationMs)
+        put("logo", c.showLogo)
         put("segments", JSONArray().apply { c.segments.forEach { put(JSONArray().put(it.startMs).put(it.endMs)) } })
         put("captions", JSONArray().apply {
             c.captions.forEach { k ->
@@ -151,7 +152,6 @@ class ProjectRepository(private val context: Context) {
                 )
             } ?: EndCard(),
             cardBackgroundUri = o.optString("cardBackground").takeIf { it.isNotEmpty() }?.let(Uri::parse),
-            logoWatermark = o.optBoolean("logoWatermark", true),
             lastExport = o.optJSONObject("export")?.let { x ->
                 ExportInfo(Uri.parse(x.getString("uri")), x.optString("fileName"), x.optLong("at"), x.optLong("durationMs"))
             },
@@ -170,6 +170,7 @@ class ProjectRepository(private val context: Context) {
             displayName = o.optString("name"),
             sourceDurationMs = o.optLong("sourceMs"),
             photoDurationMs = o.optLong("photoMs", Clip.DEFAULT_PHOTO_MS),
+            showLogo = o.optBoolean("logo", false),
             segments = (0 until segs.length()).map { i -> segs.getJSONArray(i).let { Segment(it.getLong(0), it.getLong(1)) } },
             captions = (0 until caps.length()).map { i ->
                 caps.getJSONObject(i).let { Caption(it.getLong("id"), it.optString("name"), it.optString("role"), it.optLong("start"), it.optLong("dur")) }

@@ -72,6 +72,7 @@ fun ClipEditScreen(vm: MontageViewModel, clipId: Long, onBack: () -> Unit) {
                 PhotoEditor(clip) { vm.updateClip(clip.copy(photoDurationMs = it)) }
             }
             HorizontalDivider()
+            LogoOnClip(vm, clip)
             CaptionsEditor(
                 captions = clip.captions,
                 clipDurationMs = clip.editedDurationMs,
@@ -161,3 +162,37 @@ private fun CaptionCard(caption: Caption, clipDurationMs: Long, onUpdate: (Capti
         }
     }
 }
+
+/** Logo en miniature sur ce média : aperçu fidèle (7 % de la hauteur, en bas à droite) + interrupteur. */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun LogoOnClip(vm: MontageViewModel, clip: Clip) {
+    val project by vm.project.collectAsStateWithLifecycle()
+    val logo by produceState<android.graphics.Bitmap?>(null) { value = vm.logoBitmap() }
+    Text("Logo en miniature", style = MaterialTheme.typography.titleMedium)
+    BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp))) {
+        MediaThumbnail(clip.uri, clip.isVideo, Modifier.fillMaxSize(), sizePx = 1024)
+        val l = logo
+        if (clip.showLogo && l != null) {
+            val h = maxHeight * 0.07f
+            Image(
+                l.asImageBitmap(), "Logo",
+                Modifier.align(Alignment.BottomEnd).padding(end = maxHeight * 0.03f, bottom = maxHeight * 0.03f)
+                    .height(h).aspectRatio(l.width.toFloat() / l.height),
+                alpha = 0.9f,
+            )
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text("Afficher le logo sur ce média")
+            Text("En bas à droite, pendant toute sa durée", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+        }
+        Switch(checked = clip.showLogo, onCheckedChange = { vm.setClipLogo(clip.id, it) })
+    }
+    val all = project.clips.all { it.showLogo }
+    TextButton(onClick = { vm.setLogoOnAllClips(!all) }) {
+        Text(if (all) "Retirer le logo de tous les médias" else "Mettre le logo sur tous les médias du projet", color = AppColors.Link)
+    }
+}
+

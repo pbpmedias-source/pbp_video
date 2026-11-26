@@ -54,10 +54,10 @@ object CompositionFactory {
                 is TimelineItem.EndCardItem ->
                     imageItem(requireNotNull(prepared.endCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.PhotoItem ->
-                    imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions, withLogo = true))
+                    imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions, withLogo = item.clip.showLogo))
                 is TimelineItem.VideoItem -> {
                     val gain = TransitionEffects.audioGain(prepared.transition, index, count, item.durationMs)
-                    videoItem(item, effects(item.captions, withLogo = true), gain)
+                    videoItem(item, effects(item.captions, withLogo = item.clip.showLogo), gain)
                 }
             }
         }

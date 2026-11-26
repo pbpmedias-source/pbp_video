@@ -40,6 +40,8 @@ data class Clip(
     val segments: List<Segment> = emptyList(),
     val photoDurationMs: Long = DEFAULT_PHOTO_MS,
     val captions: List<Caption> = emptyList(),
+    /** Logo en miniature en bas à droite de ce média (réglé à côté de ses légendes). */
+    val showLogo: Boolean = false,
 ) {
     val isVideo: Boolean get() = type != ClipType.PHOTO
     val editedDurationMs: Long
@@ -152,8 +154,6 @@ data class Project(
     val endCard: EndCard = EndCard(),
     /** Photo d'arrière-plan des génériques de ce projet (null = fond uni). */
     val cardBackgroundUri: Uri? = null,
-    /** Logo en miniature en bas à droite de chaque photo et rush. */
-    val logoWatermark: Boolean = true,
     val lastExport: ExportInfo? = null,
     val youtube: YouTubeInfo? = null,
 )
