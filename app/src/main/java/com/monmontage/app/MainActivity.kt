@@ -29,6 +29,8 @@ import com.monmontage.app.ui.theme.MonMontageTheme
 
 sealed interface Screen {
     data object Projects : Screen
+    data object Library : Screen
+    data object Logo : Screen
     data object Home : Screen
     data class EditClip(val clipId: Long) : Screen
     /** from = écran de retour (les génériques s'ouvrent depuis la liste ou depuis un montage). */
@@ -75,6 +77,7 @@ fun MontageApp(vm: MontageViewModel = viewModel()) {
             Screen.Home -> { vm.closeProject(); Screen.Projects }
             is Screen.TitleCard -> s.from
             is Screen.EndCard -> s.from
+            Screen.Library, Screen.Logo -> Screen.Projects
             else -> Screen.Home
         }
     }
@@ -83,8 +86,11 @@ fun MontageApp(vm: MontageViewModel = viewModel()) {
         Screen.Projects -> ProjectsScreen(
             vm = vm,
             onOpen = { screen = Screen.Home },
-            onBranding = { screen = Screen.TitleCard(Screen.Projects) },
+            onLogo = { screen = Screen.Logo },
+            onLibrary = { screen = Screen.Library },
         )
+        Screen.Library -> LibraryScreen(vm, onBack = { screen = Screen.Projects }, onOpen = { screen = Screen.Home })
+        Screen.Logo -> LogoScreen(vm, onBack = { screen = Screen.Projects })
         Screen.Home -> HomeScreen(
             vm = vm,
             onEditClip = { screen = Screen.EditClip(it) },

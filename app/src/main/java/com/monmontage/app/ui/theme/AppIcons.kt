@@ -83,4 +83,12 @@ object AppIcons {
             }
         }
     }
+
+    val Grid: ImageVector by lazy {
+        icon("Grid") {
+            for ((x, y) in listOf(3f to 3f, 14f to 3f, 3f to 14f, 14f to 14f)) {
+                stroke { moveTo(x, y); lineTo(x + 7f, y); lineTo(x + 7f, y + 7f); lineTo(x, y + 7f); close() }
+            }
+        }
+    }
 }

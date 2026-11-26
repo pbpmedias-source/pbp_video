@@ -52,37 +52,57 @@ data class Clip(
     }
 }
 
+/** Les 3 mises en page de générique façon journal télévisé. */
+enum class CardStyle(val label: String, val description: String) {
+    EDITION_SOIR("Édition du soir", "Bandeaux façon journal de 20 h"),
+    FLASH_INFO("Flash info", "Bandeaux en biais et bandeau défilant"),
+    MAGAZINE("Magazine", "Panneau latéral, ton documentaire"),
+}
+
+/** Générique de début : propre à chaque projet. */
 data class TitleCard(
     val enabled: Boolean = true,
-    val title: String = "Titre de la série",
+    val tag: String = "REPORTAGE",
+    val title: String = "Titre du reportage",
     val subtitle: String = "",
     val author: String = "",
-    /** Facultative : masquée si vide (le générique est commun à tous les projets). */
-    val date: String = "",
-    val durationMs: Long = 4_000,
+    val date: String = today(),
+    val place: String = "",
+    val durationMs: Long = 5_000,
 )
 
+/** Générique de fin : propre à chaque projet. Crédits : une ligne par crédit, « Rôle : Nom ». */
 data class EndCard(
     val enabled: Boolean = true,
-    val mainText: String = "Merci d'avoir regardé",
-    val secondaryText: String = "",
-    val credit: String = "",
-    val durationMs: Long = 4_000,
-)
+    val tag: String = "À BIENTÔT",
+    val title: String = "Merci d'avoir regardé",
+    val subtitle: String = "Retrouvez tous nos reportages sur la chaîne",
+    val credits: String = "Images et montage : \nMusique : Mon Montage",
+    val durationMs: Long = 5_000,
+) {
+    /** Crédits remplis uniquement, sous forme (rôle, nom). */
+    val creditPairs: List<Pair<String, String>>
+        get() = credits.lines().mapNotNull { line ->
+            val i = line.indexOf(':')
+            if (i < 0) line.trim().takeIf { it.isNotEmpty() }?.let { "" to it }
+            else {
+                val role = line.substring(0, i).trim()
+                val name = line.substring(i + 1).trim()
+                if (name.isEmpty()) null else role to name
+            }
+        }
+}
 
-/** Génériques et logo : communs à TOUS les projets (enregistrés à part). */
-data class Branding(
-    val titleCard: TitleCard = TitleCard(),
-    val endCard: EndCard = EndCard(),
-    val logoUri: Uri? = null,
-)
+/** Seul le logo est commun à tous les projets. null = logo PBP Médias fourni avec l'application. */
+data class Branding(val logoUri: Uri? = null)
 
 /** Musiques embarquées, composées par l'application (libres de droits). */
 enum class MusicTrack(val id: String, val label: String, val description: String) {
     DOUCE("douce", "Douce", "Nappes et arpège, calme · 80 BPM"),
     ENERGIQUE("energique", "Énergique", "Rythmée, basse pulsée · 120 BPM"),
     CINEMATIQUE("cinematique", "Cinématique", "Cordes amples, émotion · 64 BPM"),
-    LOFI("lofi", "Lo-fi", "Détendue, accords jazz · 72 BPM");
+    LOFI("lofi", "Lo-fi", "Détendue, accords jazz · 72 BPM"),
+    ROCK("rock", "Rock", "Guitares saturées, batterie franche · 128 BPM");
 
     companion object {
         fun fromId(id: String?): MusicTrack = entries.firstOrNull { it.id == id } ?: DOUCE
@@ -127,6 +147,13 @@ data class Project(
     val clips: List<Clip> = emptyList(),
     val music: MusicSettings = MusicSettings(),
     val transition: TransitionSettings = TransitionSettings(),
+    val cardStyle: CardStyle = CardStyle.EDITION_SOIR,
+    val titleCard: TitleCard = TitleCard(),
+    val endCard: EndCard = EndCard(),
+    /** Photo d'arrière-plan des génériques de ce projet (null = fond uni). */
+    val cardBackgroundUri: Uri? = null,
+    /** Logo en miniature en bas à droite de chaque photo et rush. */
+    val logoWatermark: Boolean = true,
     val lastExport: ExportInfo? = null,
     val youtube: YouTubeInfo? = null,
 )

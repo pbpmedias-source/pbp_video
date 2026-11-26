@@ -21,13 +21,14 @@ import kotlin.math.sin
  */
 object MusicLibrary {
     private const val SR = 44_100
-    private const val VERSION = 3
+    private const val VERSION = 3   // ROCK ajouté : nouveau fichier, les autres restent valides
 
     fun durationMs(track: MusicTrack): Long = when (track) {
         MusicTrack.DOUCE -> 24_000L        // 80 BPM, 8 mesures
         MusicTrack.ENERGIQUE -> 16_000L    // 120 BPM, 8 mesures
         MusicTrack.CINEMATIQUE -> 30_000L  // 64 BPM, 8 mesures
         MusicTrack.LOFI -> 26_667L         // 72 BPM, 8 mesures
+        MusicTrack.ROCK -> 15_000L         // 128 BPM, 8 mesures
     }
 
     @Synchronized
@@ -39,6 +40,7 @@ object MusicLibrary {
             MusicTrack.ENERGIQUE -> energique()
             MusicTrack.CINEMATIQUE -> cinematique()
             MusicTrack.LOFI -> lofi()
+            MusicTrack.ROCK -> rock()
         }
         val tmp = File(context.filesDir, file.name + ".tmp")
         writeWav(tmp, pcm)
@@ -131,6 +133,40 @@ object MusicLibrary {
         finish()
     }
 
+    /** Rock : accords de puissance saturés en croches, basse, batterie franche (Mi – Do – Sol – Ré). */
+    private fun rock(): FloatArray = Synth(durationMs(MusicTrack.ROCK)).run {
+        val beat = 60.0 / 128
+        val bar = beat * 4
+        val roots = intArrayOf(40, 36, 43, 38)          // Mi2, Do2, Sol2, Ré2
+        roots.forEachIndexed { i, r ->
+            val s0 = i * bar * 2
+            for (e in 0 until 16) {                     // 2 mesures de croches « étouffées », accent sur les temps
+                val t = s0 + e * beat / 2
+                val last = i == 3 && e >= 12             // fin de boucle : accord tenu
+                val len = if (last) beat * 2 else beat * 0.42
+                if (last && e > 12) continue
+                val amp = if (e % 2 == 0) 0.16 else 0.11
+                for (m in intArrayOf(r + 12, r + 19, r + 24)) {
+                    tone(t, len, hz(m), amp, 0.003, 0.06, wave = SAW, decay = if (last) 0.8 else 5.0, target = guitar)
+                }
+                tone(t, beat * 0.45, hz(r), if (e % 2 == 0) 0.22 else 0.16, 0.004, 0.05, wave = SAW, decay = 4.0)
+            }
+            for (k in 0 until 8) {                      // petite mélodie aiguë sur la 2e mesure
+                if (k % 2 == 1) tone(s0 + bar + k * beat / 2, beat * 0.4, hz(r + 31 + (if (k == 3) 2 else 0)), 0.035, 0.005, 0.2, decay = 3.0)
+            }
+        }
+        for (b in 0 until 32) {
+            val t = b * beat
+            kick(t, if (b % 2 == 0) 0.55 else 0.35)
+            if (b % 2 == 1) snare(t, 0.24)
+            hat(t, 0.06); hat(t + beat / 2, 0.05)
+            if (b % 4 == 3) kick(t + beat / 2, 0.3)
+        }
+        crash(0.0, 0.12)
+        mixGuitar(drive = 3.5, level = 0.5)
+        finish()
+    }
+
     // ---------------- Synthèse ----------------
 
     private const val SINE = 0
@@ -159,12 +195,15 @@ object MusicLibrary {
     private class Synth(durationMs: Long) {
         val n = (SR * durationMs / 1000.0).roundToInt()
         val buf = FloatArray(n)
+        /** Piste séparée pour la guitare, saturée avant d'être mélangée. */
+        val guitar by lazy { FloatArray(n) }
         private val rnd = java.util.Random(42)
 
         /** Ajoute un son ; ce qui dépasse la fin revient au début : boucle parfaite. */
         fun tone(
             startS: Double, lenS: Double, freq: Double, amp: Double,
             attack: Double = 0.01, release: Double = 0.2, wave: Int = SINE, decay: Double = 0.0,
+            target: FloatArray = buf,
         ) {
             val table = tables[wave]
             val start = (startS * SR).toInt()
@@ -175,7 +214,7 @@ object MusicLibrary {
                 val t = i.toDouble() / SR
                 var env = min(1.0, t / attack)
                 env *= if (decay > 0) exp(-t * decay) else if (t > lenS) max(0.0, 1 - (t - lenS) / release) else 1.0
-                buf[(start + i) % n] += (amp * env * table[phase.toInt() and (TABLE - 1)]).toFloat()
+                target[(start + i) % n] += (amp * env * table[phase.toInt() and (TABLE - 1)]).toFloat()
                 phase += inc
                 if (phase >= TABLE) phase -= TABLE
             }
@@ -222,6 +261,29 @@ object MusicLibrary {
                 val t = i.toDouble() / SR
                 phase += 2 * PI * (40 + 30 * exp(-t * 4)) / SR
                 buf[(start + i) % n] += (amp * exp(-t * 1.6) * min(1.0, t / 0.01) * sin(phase)).toFloat()
+            }
+        }
+
+        /** Saturation douce (tanh) de la guitare, puis mélange avec le reste. */
+        fun mixGuitar(drive: Double, level: Double) {
+            var lp = 0.0
+            val a = 1 - exp(-2 * PI * 3_000 / SR)            // adoucit les aigus de la saturation
+            for (i in 0 until n) {
+                val d = kotlin.math.tanh(drive * guitar[i])
+                lp += a * (d - lp)
+                buf[i] += (level * lp).toFloat()
+            }
+        }
+
+        /** Cymbale : bruit aigu à longue décroissance. */
+        fun crash(startS: Double, amp: Double) {
+            val start = (startS * SR).toInt()
+            var prev = 0.0
+            for (i in 0 until (1.8 * SR).toInt()) {
+                val t = i.toDouble() / SR
+                val noise = rnd.nextGaussian() * 0.5
+                val hp = noise - prev; prev = noise
+                buf[(start + i) % n] += (amp * hp * exp(-t * 2.2)).toFloat()
             }
         }
 

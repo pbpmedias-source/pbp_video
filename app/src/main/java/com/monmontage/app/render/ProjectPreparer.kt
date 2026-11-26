@@ -2,6 +2,8 @@ package com.monmontage.app.render
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import com.monmontage.app.R
 import android.net.Uri
 import android.os.StatFs
 import com.monmontage.app.model.Branding
@@ -30,6 +32,8 @@ data class PreparedProject(
     val musicDurationMs: Long,
     val music: MusicSettings,
     val transition: TransitionSettings,
+    /** Calque du logo en miniature (null = désactivé). */
+    val watermarkFile: File?,
 )
 
 class ProjectPreparer(private val context: Context) {
@@ -52,14 +56,19 @@ class ProjectPreparer(private val context: Context) {
             }
 
             onStep("Préparation des génériques…")
-            val logo = branding.logoUri?.let { uri ->
-                runCatching { MediaUtils.decodeBitmap(context, uri, spec.width / 2, spec.height / 2) }.getOrNull()
+            val logo = loadLogo(branding, spec)
+            val background = project.cardBackgroundUri?.let { uri ->
+                runCatching { MediaUtils.decodeBitmap(context, uri, spec.width * 2, spec.height * 2) }.getOrNull()
             }
-            val titleFile = if (branding.titleCard.enabled)
-                writePng(Painter.renderTitleCard(spec.width, spec.height, branding.titleCard, logo), File(dir, "title_${spec.height}.png"))
+            val titleFile = if (project.titleCard.enabled)
+                writePng(Painter.renderTitleCard(context, spec.width, spec.height, project.cardStyle, project.titleCard, logo, background), File(dir, "title_${spec.height}.png"))
             else null
-            val endFile = if (branding.endCard.enabled)
-                writePng(Painter.renderEndCard(spec.width, spec.height, branding.endCard, logo), File(dir, "end_${spec.height}.png"))
+            val endFile = if (project.endCard.enabled)
+                writePng(Painter.renderEndCard(context, spec.width, spec.height, project.cardStyle, project.endCard, logo, background), File(dir, "end_${spec.height}.png"))
+            else null
+            background?.recycle()
+            val watermarkFile = if (project.logoWatermark && logo != null)
+                writePng(Painter.renderWatermark(spec.width, spec.height, logo), File(dir, "watermark_${spec.height}.png"))
             else null
             logo?.recycle()
 
@@ -86,8 +95,19 @@ class ProjectPreparer(private val context: Context) {
             }
 
             ensureFreeSpace(dir, timeline.totalMs, spec)
-            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music, project.transition)
+            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music, project.transition, watermarkFile)
         }
+
+    /** Logo choisi par l'utilisateur, sinon logo PBP Médias fourni avec l'application. */
+    fun loadLogo(branding: Branding, spec: OutputSpec): Bitmap? {
+        val maxSide = spec.height / 2
+        branding.logoUri?.let { uri ->
+            runCatching { return MediaUtils.decodeBitmap(context, uri, maxSide, maxSide) }
+        }
+        return runCatching {
+            BitmapFactory.decodeResource(context.resources, R.drawable.logo_pbp_medias, BitmapFactory.Options().apply { inScaled = false })
+        }.getOrNull()
+    }
 
     private fun writePng(bitmap: Bitmap, file: File): File {
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

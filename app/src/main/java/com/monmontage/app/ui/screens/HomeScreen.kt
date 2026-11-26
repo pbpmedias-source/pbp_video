@@ -111,10 +111,10 @@ fun HomeScreen(
         ) {
             if (busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             item {
-                val t = branding.titleCard
+                val t = project.titleCard
                 SectionCard(
                     AppIcons.Title, AppColors.TitleBg, AppColors.Link, "Générique de début",
-                    if (t.enabled) "Commun à tous les projets · ${t.durationMs / 1000} s" else "Désactivé",
+                    if (t.enabled) "${project.cardStyle.label} · ${t.title.ifBlank { "(sans titre)" }} · ${t.durationMs / 1000} s" else "Désactivé",
                     onEditTitle,
                 )
             }
@@ -143,10 +143,10 @@ fun HomeScreen(
                 )
             }
             item {
-                val e = branding.endCard
+                val e = project.endCard
                 SectionCard(
                     AppIcons.Lines, AppColors.TitleBg, AppColors.Link, "Générique de fin",
-                    if (e.enabled) "Commun à tous les projets · ${e.durationMs / 1000} s" else "Désactivé",
+                    if (e.enabled) "${project.cardStyle.label} · ${e.durationMs / 1000} s" else "Désactivé",
                     onEditEnd,
                 )
             }

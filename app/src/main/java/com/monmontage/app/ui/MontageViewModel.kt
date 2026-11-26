@@ -110,7 +110,7 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
             _projects.value = repo.loadAll().map { p ->
                 val first = p.clips.firstOrNull()
                 ProjectSummary(
-                    id = p.id, name = p.name, updatedAt = p.updatedAt,
+                    id = p.id, name = p.name, createdAt = p.createdAt, updatedAt = p.updatedAt,
                     durationMs = if (p.clips.isEmpty()) 0 else TimelinePlanner.plan(p, b).totalMs,
                     clipCount = p.clips.size, firstClipUri = first?.uri, firstClipIsVideo = first?.isVideo == true,
                     lastExport = p.lastExport, youtube = p.youtube, missingMedia = repo.countMissing(p),
@@ -121,7 +121,7 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newProject(): String {
         val count = _projects.value.size + 1
-        val p = Project(name = "Projet $count")
+        val p = Project(name = "Projet $count", titleCard = TitleCard(title = "Projet $count"))
         _project.value = p
         editing = true
         viewModelScope.launch(Dispatchers.IO) { repo.save(p) }
@@ -253,14 +253,26 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
         if (i < 0 || j !in list.indices) p else p.copy(clips = list.apply { add(j, removeAt(i)) })
     }
 
-    // ---------- Génériques communs ----------
+    // ---------- Génériques (propres au projet) et logo (commun) ----------
 
-    fun setTitleCard(card: TitleCard) = _branding.update { it.copy(titleCard = card) }
-    fun setEndCard(card: EndCard) = _branding.update { it.copy(endCard = card) }
+    fun setTitleCard(card: TitleCard) = _project.update { it.copy(titleCard = card) }
+    fun setEndCard(card: EndCard) = _project.update { it.copy(endCard = card) }
+    fun setCardStyle(style: CardStyle) = _project.update { it.copy(cardStyle = style) }
+    fun setLogoWatermark(on: Boolean) = _project.update { it.copy(logoWatermark = on) }
+    fun setCardBackground(uri: Uri?) {
+        uri?.let(::keepAccess)
+        _project.update { it.copy(cardBackgroundUri = uri) }
+    }
+
+    /** null = revenir au logo PBP Médias fourni avec l'application. */
     fun setLogo(uri: Uri?) {
         uri?.let(::keepAccess)
         _branding.update { it.copy(logoUri = uri) }
     }
+
+    /** Logo courant (choisi ou par défaut), réduit pour l'affichage. */
+    suspend fun logoBitmap(): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) { preparer.loadLogo(_branding.value, OutputSpec.PREVIEW) }
 
     // ---------- Musique et transitions ----------
 

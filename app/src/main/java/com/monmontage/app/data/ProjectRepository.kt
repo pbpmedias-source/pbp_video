@@ -11,6 +11,7 @@ import java.io.File
 data class ProjectSummary(
     val id: String,
     val name: String,
+    val createdAt: Long,
     val updatedAt: Long,
     val durationMs: Long,
     val clipCount: Int,
@@ -48,33 +49,13 @@ class ProjectRepository(private val context: Context) {
 
     @Synchronized
     fun saveBranding(b: Branding) = writeAtomic(brandingFile, JSONObject().apply {
-        put("title", JSONObject().apply {
-            put("enabled", b.titleCard.enabled); put("title", b.titleCard.title); put("subtitle", b.titleCard.subtitle)
-            put("author", b.titleCard.author); put("date", b.titleCard.date); put("durationMs", b.titleCard.durationMs)
-        })
-        put("end", JSONObject().apply {
-            put("enabled", b.endCard.enabled); put("mainText", b.endCard.mainText)
-            put("secondaryText", b.endCard.secondaryText); put("credit", b.endCard.credit); put("durationMs", b.endCard.durationMs)
-        })
         b.logoUri?.let { put("logo", it.toString()) }
     }.toString())
 
     @Synchronized
     fun loadBranding(): Branding = runCatching {
         val o = JSONObject(brandingFile.readText())
-        val t = o.getJSONObject("title")
-        val e = o.getJSONObject("end")
-        Branding(
-            titleCard = TitleCard(
-                t.optBoolean("enabled", true), t.optString("title"), t.optString("subtitle"),
-                t.optString("author"), t.optString("date"), t.optLong("durationMs", 4000),
-            ),
-            endCard = EndCard(
-                e.optBoolean("enabled", true), e.optString("mainText"), e.optString("secondaryText"),
-                e.optString("credit"), e.optLong("durationMs", 4000),
-            ),
-            logoUri = o.optString("logo").takeIf { it.isNotEmpty() }?.let(Uri::parse),
-        )
+        Branding(logoUri = o.optString("logo").takeIf { it.isNotEmpty() }?.let(Uri::parse))
     }.getOrDefault(Branding())
 
     /** Nombre de médias du projet devenus illisibles (supprimés de la galerie, accès perdu…). */
@@ -101,6 +82,19 @@ class ProjectRepository(private val context: Context) {
             put("mute", p.music.muteDuringInterviews)
         })
         put("transition", JSONObject().apply { put("style", p.transition.style.name); put("durationMs", p.transition.durationMs) })
+        put("cardStyle", p.cardStyle.name)
+        put("titleCard", JSONObject().apply {
+            val t = p.titleCard
+            put("enabled", t.enabled); put("tag", t.tag); put("title", t.title); put("subtitle", t.subtitle)
+            put("author", t.author); put("date", t.date); put("place", t.place); put("durationMs", t.durationMs)
+        })
+        put("endCard", JSONObject().apply {
+            val e = p.endCard
+            put("enabled", e.enabled); put("tag", e.tag); put("title", e.title); put("subtitle", e.subtitle)
+            put("credits", e.credits); put("durationMs", e.durationMs)
+        })
+        p.cardBackgroundUri?.let { put("cardBackground", it.toString()) }
+        put("logoWatermark", p.logoWatermark)
         p.lastExport?.let { x ->
             put("export", JSONObject().apply {
                 put("uri", x.uri.toString()); put("fileName", x.fileName); put("at", x.exportedAt); put("durationMs", x.durationMs)
@@ -141,6 +135,23 @@ class ProjectRepository(private val context: Context) {
                 style = runCatching { TransitionStyle.valueOf(t.optString("style")) }.getOrDefault(TransitionStyle.FADE_BLACK),
                 durationMs = t.optLong("durationMs", 600),
             ),
+            cardStyle = runCatching { CardStyle.valueOf(o.optString("cardStyle")) }.getOrDefault(CardStyle.EDITION_SOIR),
+            titleCard = o.optJSONObject("titleCard")?.let { t ->
+                val d = TitleCard()
+                TitleCard(
+                    t.optBoolean("enabled", true), t.optString("tag", d.tag), t.optString("title", d.title), t.optString("subtitle"),
+                    t.optString("author"), t.optString("date"), t.optString("place"), t.optLong("durationMs", d.durationMs),
+                )
+            } ?: TitleCard(title = o.optString("name", "Titre du reportage")),
+            endCard = o.optJSONObject("endCard")?.let { e ->
+                val d = EndCard()
+                EndCard(
+                    e.optBoolean("enabled", true), e.optString("tag", d.tag), e.optString("title", d.title),
+                    e.optString("subtitle"), e.optString("credits"), e.optLong("durationMs", d.durationMs),
+                )
+            } ?: EndCard(),
+            cardBackgroundUri = o.optString("cardBackground").takeIf { it.isNotEmpty() }?.let(Uri::parse),
+            logoWatermark = o.optBoolean("logoWatermark", true),
             lastExport = o.optJSONObject("export")?.let { x ->
                 ExportInfo(Uri.parse(x.getString("uri")), x.optString("fileName"), x.optLong("at"), x.optLong("durationMs"))
             },

@@ -40,13 +40,15 @@ data class Timeline(
 object TimelinePlanner {
     private const val MIN_ITEM_MS = 100L
 
-    fun plan(project: Project, branding: Branding): Timeline {
+    /** [branding] n'influe pas sur la durée ; gardé pour un appel uniforme. */
+    @Suppress("UNUSED_PARAMETER")
+    fun plan(project: Project, branding: Branding? = null): Timeline {
         val items = mutableListOf<TimelineItem>()
         var t = 0L
 
-        if (branding.titleCard.enabled) {
-            items += TimelineItem.TitleCardItem(t, branding.titleCard.durationMs)
-            t += branding.titleCard.durationMs
+        if (project.titleCard.enabled) {
+            items += TimelineItem.TitleCardItem(t, project.titleCard.durationMs)
+            t += project.titleCard.durationMs
         }
         for (clip in project.clips) {
             if (!clip.isVideo) {
@@ -65,9 +67,9 @@ object TimelinePlanner {
                 }
             }
         }
-        if (branding.endCard.enabled) {
-            items += TimelineItem.EndCardItem(t, branding.endCard.durationMs)
-            t += branding.endCard.durationMs
+        if (project.endCard.enabled) {
+            items += TimelineItem.EndCardItem(t, project.endCard.durationMs)
+            t += project.endCard.durationMs
         }
 
         val ranges = mutableListOf<Pair<Long, Long>>()

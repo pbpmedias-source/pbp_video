@@ -42,12 +42,11 @@ import java.util.Locale
 /** Écran d'ouverture : la liste des montages enregistrés. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onBranding: () -> Unit) {
+fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onLogo: () -> Unit, onLibrary: () -> Unit) {
     val projects by vm.projects.collectAsStateWithLifecycle()
     var menuFor by remember { mutableStateOf<ProjectSummary?>(null) }
-    var renameFor by remember { mutableStateOf<ProjectSummary?>(null) }
-    var deleteFor by remember { mutableStateOf<ProjectSummary?>(null) }
     LaunchedEffect(Unit) { vm.refreshProjects() }
+    val recents = projects.take(RECENT_COUNT)
 
     Scaffold { padding ->
         LazyColumn(
@@ -75,14 +74,23 @@ fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onBranding: () -> U
                 }
             }
             if (projects.isNotEmpty()) item {
-                Text("Récents", style = MaterialTheme.typography.labelLarge, color = AppColors.Muted, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Récents", style = MaterialTheme.typography.labelLarge, color = AppColors.Muted, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onLibrary) { Text("Tout voir (${projects.size})", color = AppColors.Link) }
+                }
             }
-            items(projects, key = { it.id }) { p ->
+            items(recents, key = { it.id }) { p ->
                 ProjectCard(p, onOpen = { vm.openProject(p.id, onOpen) }, onMenu = { menuFor = p })
+            }
+            if (projects.isNotEmpty()) item {
+                OutlinedButton(
+                    onClick = onLibrary, shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, AppColors.Outline), modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) { Text("Toute la bibliothèque · ${projects.size} projet(s)", color = AppColors.OnSurface) }
             }
             item {
                 Card(
-                    onClick = onBranding,
+                    onClick = onLogo,
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = AppColors.Background),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -92,8 +100,8 @@ fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onBranding: () -> U
                         IconTile(AppIcons.Title, AppColors.TitleBg, AppColors.Link)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Génériques et logo", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Communs à tous les projets", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+                            Text("Logo", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                            Text("Commun à tous les projets", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
                         }
                         Text("Modifier", color = AppColors.Link, style = MaterialTheme.typography.labelLarge)
                     }
@@ -102,8 +110,19 @@ fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onBranding: () -> U
         }
     }
 
+    ProjectMenus(vm, menuFor, onDismiss = { menuFor = null }, onOpen = onOpen)
+}
+
+private const val RECENT_COUNT = 4
+
+/** Options d'un projet (ouvrir, renommer, dupliquer, supprimer) : utilisées par l'accueil et la bibliothèque. */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+internal fun ProjectMenus(vm: MontageViewModel, menuFor: ProjectSummary?, onDismiss: () -> Unit, onOpen: () -> Unit) {
+    var renameFor by remember { mutableStateOf<ProjectSummary?>(null) }
+    var deleteFor by remember { mutableStateOf<ProjectSummary?>(null) }
     menuFor?.let { p ->
-        ModalBottomSheet(onDismissRequest = { menuFor = null }, containerColor = AppColors.Surface) {
+        ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppColors.Surface) {
             Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 28.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp)) {
                     Box(Modifier.size(width = 72.dp, height = 40.dp)) {
@@ -115,11 +134,11 @@ fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onBranding: () -> U
                         Text("${formatMs(p.durationMs).substringBeforeLast('.')} · ${p.clipCount} média(s) · ${relative(p.updatedAt)}", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
                     }
                 }
-                SheetAction(AppIcons.Lines, "Ouvrir le montage") { menuFor = null; vm.openProject(p.id, onOpen) }
-                SheetAction(Icons.Default.Edit, "Renommer") { menuFor = null; renameFor = p }
-                SheetAction(AppIcons.Transition, "Dupliquer") { menuFor = null; vm.duplicateProject(p.id) }
+                SheetAction(AppIcons.Lines, "Ouvrir le montage") { onDismiss(); vm.openProject(p.id, onOpen) }
+                SheetAction(Icons.Default.Edit, "Renommer") { onDismiss(); renameFor = p }
+                SheetAction(AppIcons.Transition, "Dupliquer") { onDismiss(); vm.duplicateProject(p.id) }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                SheetAction(Icons.Default.Delete, "Supprimer le projet", color = MaterialTheme.colorScheme.error) { menuFor = null; deleteFor = p }
+                SheetAction(Icons.Default.Delete, "Supprimer le projet", color = MaterialTheme.colorScheme.error) { onDismiss(); deleteFor = p }
             }
         }
     }
@@ -167,7 +186,7 @@ private fun SheetAction(icon: ImageVector, label: String, color: Color = AppColo
 }
 
 @Composable
-private fun ProjectCard(p: ProjectSummary, onOpen: () -> Unit, onMenu: () -> Unit) {
+internal fun ProjectCard(p: ProjectSummary, onOpen: () -> Unit, onMenu: () -> Unit) {
     Card(
         onClick = onOpen,
         shape = RoundedCornerShape(16.dp),
@@ -198,7 +217,7 @@ private fun ProjectCard(p: ProjectSummary, onOpen: () -> Unit, onMenu: () -> Uni
 }
 
 @Composable
-private fun StatusBadge(p: ProjectSummary) {
+internal fun StatusBadge(p: ProjectSummary) {
     val (bg, fg, label, icon) = when {
         p.missingMedia > 0 -> Quad(Color(0xFF3A2614), Color(0xFFFFB27A), "${p.missingMedia} média(s) introuvable(s)", Icons.Default.Warning)
         p.youtube != null -> Quad(Color(0xFF2A3550), Color(0xFFDCE6FF), "Sur YouTube", AppIcons.YouTube)
@@ -216,7 +235,7 @@ private fun StatusBadge(p: ProjectSummary) {
 
 private data class Quad(val bg: Color, val fg: Color, val label: String, val icon: ImageVector?)
 
-private fun relative(time: Long): String {
+internal fun relative(time: Long): String {
     val diff = System.currentTimeMillis() - time
     return when {
         diff < 60_000 -> "à l'instant"

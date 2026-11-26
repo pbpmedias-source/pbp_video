@@ -37,13 +37,15 @@ object CompositionFactory {
 
         val count = timeline.items.size
         val videoItems = timeline.items.mapIndexed { index, item ->
-            // Ordre des effets : mise à l'échelle → zoom d'entrée → bandeau → fondu (le bandeau fond avec l'image).
             val transition = TransitionEffects.videoEffects(prepared.transition, index, count, item.durationMs)
             val isZoom = prepared.transition.style == TransitionStyle.ZOOM
-            fun effects(captions: List<LocalCaption>): List<Effect> = buildList {
+            // Ordre : mise à l'échelle → zoom d'entrée → bandeau → logo en miniature → fondu.
+            fun effects(captions: List<LocalCaption>, withLogo: Boolean = false): List<Effect> = buildList {
                 add(presentation)
                 if (isZoom) addAll(transition)
                 addAll(captionEffects(captions, spec))
+                val wm = prepared.watermarkFile
+                if (withLogo && wm != null) add(OverlayEffect(ImmutableList.of<TextureOverlay>(WatermarkOverlay(wm))))
                 if (!isZoom) addAll(transition)
             }
             when (item) {
@@ -52,10 +54,10 @@ object CompositionFactory {
                 is TimelineItem.EndCardItem ->
                     imageItem(requireNotNull(prepared.endCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.PhotoItem ->
-                    imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions))
+                    imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions, withLogo = true))
                 is TimelineItem.VideoItem -> {
                     val gain = TransitionEffects.audioGain(prepared.transition, index, count, item.durationMs)
-                    videoItem(item, effects(item.captions), gain)
+                    videoItem(item, effects(item.captions, withLogo = true), gain)
                 }
             }
         }

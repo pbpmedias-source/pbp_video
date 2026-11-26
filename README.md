@@ -8,16 +8,25 @@ sur une chaîne YouTube**.
 
 | Fonction | Où |
 |----------|----|
-| **Mes projets** : liste des montages, ouverture, renommage, duplication, suppression (avec confirmation), enregistrement automatique | Écran d'ouverture |
+| **Mes projets** : projets récents, nouveau projet, renommage, duplication, suppression (avec confirmation), enregistrement automatique | Écran d'ouverture |
+| **Bibliothèque** : tous les projets, recherche, filtres (brouillons, exportés, YouTube), tri, grille ou liste | « Tout voir » |
 | Médias de la galerie (sélecteur système), ordre, type Illustration / Interview | Montage d'un projet |
 | Découpe : scinder, ajuster début/fin, supprimer des portions, « Lire la découpe » | Toucher un clip vidéo |
 | Légendes « bandeau JT » (nom + fonction) placées à n'importe quel moment d'un clip | Toucher un clip |
-| **Génériques de début et de fin + logo, communs à tous les projets** | « Génériques et logo » |
-| **4 musiques embarquées** (Douce, Énergique, Cinématique, Lo-fi) ou import ; coupure/sourdine douce pendant les interviews | Musique |
+| **Génériques façon JT** propres à chaque projet, **3 styles** (Édition du soir, Flash info, Magazine) aux couleurs PBP Médias, photo d'arrière-plan au choix | Générique de début / fin |
+| **Logo PBP Médias par défaut**, commun à tous les projets (remplaçable) ; **logo en miniature** en bas à droite des photos et rushs (option par projet) | Mes projets › Logo ; Générique |
+| **5 musiques embarquées** (Douce, Énergique, Cinématique, Lo-fi, Rock) ou import ; coupure/sourdine douce pendant les interviews | Musique |
 | **3 styles de transition** (Fondu au noir, Flash blanc, Zoom doux) + « Aucune », appliqués à tout le projet, durée 0,3 / 0,6 / 1 s | Transitions |
 | Aperçu du montage (rendu 480p par le même moteur que l'export) | Aperçu |
 | Export MP4 en un bouton, progression, enregistrement dans Films/MonMontage | Exporter |
 | **Publication YouTube** : titre, description, visibilité, public visé, Wi-Fi seulement, envoi en arrière-plan reprenable | Après l'export |
+
+## Charte graphique
+
+Couleurs relevées sur le logo PBP Médias : orange `#FF8E0A`, violet `#72037D`, violet très foncé `#2A0630`
+(panneaux), blanc. Logo détouré fourni dans `res/drawable-nodpi/logo_pbp_medias.png`.
+Polices des génériques (licence SIL OFL, dans `assets/fonts`) : Oswald (Édition du soir), Anton (Flash info),
+Fraunces (Magazine), Inter (textes courants). Les bandeaux de légende reprennent aussi la charte.
 
 ## Choix techniques
 
