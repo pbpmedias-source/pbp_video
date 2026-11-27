@@ -49,17 +49,41 @@ class ProjectRepository(private val context: Context) {
 
     @Synchronized
     fun saveBranding(b: Branding) = writeAtomic(brandingFile, JSONObject().apply {
-        b.logoUri?.let { put("logo", it.toString()) }
+        put("v", 2)
+        put("default", b.defaultKitId)
+        put("kits", JSONArray().apply {
+            b.kits.forEach { k ->
+                put(JSONObject().apply {
+                    put("id", k.id); put("name", k.name); k.logoUri?.let { put("logo", it.toString()) }
+                    put("accent", k.accent); put("primary", k.primary); put("dark", k.dark)
+                })
+            }
+        })
     }.toString())
 
     @Synchronized
     fun loadBranding(): Branding = runCatching {
         val o = JSONObject(brandingFile.readText())
-        Branding(logoUri = o.optString("logo").takeIf { it.isNotEmpty() }?.let(Uri::parse))
+        val arr = o.optJSONArray("kits")
+        if (arr == null || arr.length() == 0) {
+            // Ancien format : un seul logo commun → charte PBP Médias avec ce logo.
+            Branding(listOf(BrandKit(id = BrandKit.DEFAULT_ID, logoUri = o.optString("logo").takeIf { it.isNotEmpty() }?.let(Uri::parse))))
+        } else {
+            val d = BrandKit()
+            val kits = (0 until arr.length()).map { i ->
+                val k = arr.getJSONObject(i)
+                BrandKit(
+                    id = k.getString("id"), name = k.optString("name", "Charte"),
+                    logoUri = k.optString("logo").takeIf { it.isNotEmpty() }?.let(Uri::parse),
+                    accent = k.optInt("accent", d.accent), primary = k.optInt("primary", d.primary), dark = k.optInt("dark", d.dark),
+                )
+            }
+            Branding(kits, o.optString("default", kits.first().id))
+        }
     }.getOrDefault(Branding())
 
     /** Nombre de médias du projet devenus illisibles (supprimés de la galerie, accès perdu…). */
-    fun countMissing(project: Project): Int = project.clips.count { !isReadable(it.uri) }
+    fun countMissing(project: Project): Int = project.clips.count { it.hasMedia && !isReadable(it.uri) }
 
     fun isReadable(uri: Uri): Boolean = runCatching {
         context.contentResolver.openFileDescriptor(uri, "r")?.use { true } ?: false
@@ -94,6 +118,7 @@ class ProjectRepository(private val context: Context) {
             put("credits", e.credits); put("durationMs", e.durationMs)
         })
         p.cardBackgroundUri?.let { put("cardBackground", it.toString()) }
+        p.kitId?.let { put("kit", it) }
 
         p.lastExport?.let { x ->
             put("export", JSONObject().apply {
@@ -107,6 +132,7 @@ class ProjectRepository(private val context: Context) {
         put("id", c.id); put("uri", c.uri.toString()); put("mime", c.mimeType); put("type", c.type.name)
         put("name", c.displayName); put("sourceMs", c.sourceDurationMs); put("photoMs", c.photoDurationMs)
         put("logo", c.showLogo)
+        if (c.isCarton) { put("cartonText", c.cartonText); put("cartonAuthor", c.cartonAuthor); put("cartonQuote", c.cartonQuote) }
         put("segments", JSONArray().apply { c.segments.forEach { put(JSONArray().put(it.startMs).put(it.endMs)) } })
         put("captions", JSONArray().apply {
             c.captions.forEach { k ->
@@ -152,6 +178,7 @@ class ProjectRepository(private val context: Context) {
                 )
             } ?: EndCard(),
             cardBackgroundUri = o.optString("cardBackground").takeIf { it.isNotEmpty() }?.let(Uri::parse),
+            kitId = o.optString("kit").takeIf { it.isNotEmpty() },
             lastExport = o.optJSONObject("export")?.let { x ->
                 ExportInfo(Uri.parse(x.getString("uri")), x.optString("fileName"), x.optLong("at"), x.optLong("durationMs"))
             },
@@ -171,6 +198,9 @@ class ProjectRepository(private val context: Context) {
             sourceDurationMs = o.optLong("sourceMs"),
             photoDurationMs = o.optLong("photoMs", Clip.DEFAULT_PHOTO_MS),
             showLogo = o.optBoolean("logo", false),
+            cartonText = o.optString("cartonText"),
+            cartonAuthor = o.optString("cartonAuthor"),
+            cartonQuote = o.optBoolean("cartonQuote", false),
             segments = (0 until segs.length()).map { i -> segs.getJSONArray(i).let { Segment(it.getLong(0), it.getLong(1)) } },
             captions = (0 until caps.length()).map { i ->
                 caps.getJSONObject(i).let { Caption(it.getLong("id"), it.optString("name"), it.optString("role"), it.optLong("start"), it.optLong("dur")) }

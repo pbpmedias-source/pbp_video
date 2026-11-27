@@ -4,6 +4,7 @@ package com.monmontage.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +39,12 @@ import kotlinx.coroutines.delay
  * « Lire la découpe » rejoue uniquement les segments conservés, enchaînés.
  */
 @Composable
-fun VideoTrimEditor(clip: Clip, onSegmentsChange: (List<Segment>) -> Unit) {
+fun VideoTrimEditor(
+    clip: Clip,
+    onSegmentsChange: (List<Segment>) -> Unit,
+    /** Simulation dessinée par-dessus la vidéo (légende, logo), selon la position dans la source. */
+    overlay: @Composable BoxScope.(sourcePositionMs: Long) -> Unit = {},
+) {
     val context = LocalContext.current
     val player = remember(clip.uri) { ExoPlayer.Builder(context).build() }
     DisposableEffect(player) { onDispose { player.release() } }
@@ -76,10 +82,13 @@ fun VideoTrimEditor(clip: Clip, onSegmentsChange: (List<Segment>) -> Unit) {
         }
     }
 
-    AndroidView(
-        factory = { PlayerView(it).apply { this.player = player; useController = true; setShutterBackgroundColor(android.graphics.Color.BLACK) } },
-        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)),
-    )
+    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+        AndroidView(
+            factory = { PlayerView(it).apply { this.player = player; useController = true; setShutterBackgroundColor(android.graphics.Color.BLACK) } },
+            modifier = Modifier.fillMaxSize(),
+        )
+        overlay(positionMs)
+    }
 
     SegmentBar(
         durationMs = clip.sourceDurationMs,

@@ -41,6 +41,7 @@ object AppColors {
         ClipType.PHOTO -> Color(0xFF3A2C1A) to Color(0xFFF2C48D)
         ClipType.ILLUSTRATION -> Color(0xFF8FB4FF) to Color(0xFF0B1426)
         ClipType.INTERVIEW -> Color(0xFFFF9F6E) to Color(0xFF2A1206)
+        ClipType.CARTON -> Color(0xFF7FD1B9) to Color(0xFF0B1F18)
     }
 
     /** Couleur du bloc de chaque type dans les frises (schéma musique). */
@@ -49,6 +50,7 @@ object AppColors {
         ClipType.PHOTO -> MusicBg
         ClipType.ILLUSTRATION -> Color(0xFF2A3550)
         ClipType.INTERVIEW -> Color(0xFF5A3422)
+        ClipType.CARTON -> Color(0xFF1E3A33)
     }
 }
 

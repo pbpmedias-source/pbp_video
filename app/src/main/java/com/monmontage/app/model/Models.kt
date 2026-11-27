@@ -11,6 +11,8 @@ enum class ClipType(val label: String) {
     PHOTO("Photo"),
     ILLUSTRATION("Illustration"),
     INTERVIEW("Interview"),
+    /** Carton façon JT entre deux séquences : intertitre ou citation (aucun média). */
+    CARTON("Carton"),
 }
 
 /** Portion conservée d'une vidéo source, en millisecondes. */
@@ -42,8 +44,17 @@ data class Clip(
     val captions: List<Caption> = emptyList(),
     /** Logo en miniature en bas à droite de ce média (réglé à côté de ses légendes). */
     val showLogo: Boolean = false,
+    /** Carton : texte (intertitre ou citation). */
+    val cartonText: String = "",
+    /** Carton : auteur de la citation (vide = intertitre). */
+    val cartonAuthor: String = "",
+    /** Carton : true = citation, false = intertitre. */
+    val cartonQuote: Boolean = false,
 ) {
-    val isVideo: Boolean get() = type != ClipType.PHOTO
+    val isVideo: Boolean get() = type == ClipType.ILLUSTRATION || type == ClipType.INTERVIEW
+    val isCarton: Boolean get() = type == ClipType.CARTON
+    /** A-t-il un fichier dans la galerie ? (faux pour un carton) */
+    val hasMedia: Boolean get() = !isCarton
     val editedDurationMs: Long
         get() = if (isVideo) segments.sumOf { it.durationMs } else photoDurationMs
 
@@ -95,8 +106,33 @@ data class EndCard(
         }
 }
 
-/** Seul le logo est commun à tous les projets. null = logo PBP Médias fourni avec l'application. */
-data class Branding(val logoUri: Uri? = null)
+/**
+ * Charte graphique enregistrée dans les Réglages généraux : logo + 3 couleurs.
+ * logoUri null = logo PBP Médias fourni avec l'application.
+ */
+data class BrandKit(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val name: String = "PBP Médias",
+    val logoUri: Uri? = null,
+    /** Couleur d'accent (étiquettes, filets) — orange PBP par défaut. */
+    val accent: Int = 0xFFFF8E0A.toInt(),
+    /** Couleur principale (bandeaux de titre, légendes) — violet PBP par défaut. */
+    val primary: Int = 0xFF72037D.toInt(),
+    /** Couleur foncée (panneaux, fonds sans photo) — violet très foncé par défaut. */
+    val dark: Int = 0xFF2A0630.toInt(),
+) {
+    companion object { const val DEFAULT_ID = "pbp-medias" }
+}
+
+/** Réglages généraux : chartes enregistrées et charte par défaut des nouveaux projets. */
+data class Branding(
+    val kits: List<BrandKit> = listOf(BrandKit(id = BrandKit.DEFAULT_ID)),
+    val defaultKitId: String = BrandKit.DEFAULT_ID,
+) {
+    val defaultKit: BrandKit get() = kits.firstOrNull { it.id == defaultKitId } ?: kits.first()
+    /** Charte d'un projet (sa charte si elle existe encore, sinon la charte par défaut). */
+    fun kitFor(project: Project): BrandKit = kits.firstOrNull { it.id == project.kitId } ?: defaultKit
+}
 
 /** Musiques embarquées, composées par l'application (libres de droits). */
 enum class MusicTrack(val id: String, val label: String, val description: String) {
@@ -154,6 +190,8 @@ data class Project(
     val endCard: EndCard = EndCard(),
     /** Photo d'arrière-plan des génériques de ce projet (null = fond uni). */
     val cardBackgroundUri: Uri? = null,
+    /** Charte graphique du projet (null = charte par défaut des Réglages généraux). */
+    val kitId: String? = null,
     val lastExport: ExportInfo? = null,
     val youtube: YouTubeInfo? = null,
 )
@@ -200,6 +238,16 @@ object SegmentOps {
         val max = if (index < segments.lastIndex) segments[index + 1].startMs else sourceDurationMs
         if (posMs > max || posMs < s.startMs + MIN_MS) return segments
         return segments.toMutableList().also { it[index] = s.copy(endMs = posMs) }
+    }
+
+    /** Position dans la partie conservée (temps des légendes), ou null si la position est dans une portion coupée. */
+    fun editedTimeAt(segments: List<Segment>, sourcePosMs: Long): Long? {
+        var offset = 0L
+        for (s in segments) {
+            if (sourcePosMs in s.startMs..s.endMs) return offset + (sourcePosMs - s.startMs)
+            offset += s.durationMs
+        }
+        return null
     }
 
     fun remove(segments: List<Segment>, index: Int): List<Segment> =

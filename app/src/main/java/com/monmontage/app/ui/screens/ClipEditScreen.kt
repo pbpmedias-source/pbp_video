@@ -4,6 +4,7 @@ package com.monmontage.app.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
@@ -16,13 +17,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.monmontage.app.model.Caption
 import com.monmontage.app.model.Clip
 import com.monmontage.app.model.ClipType
+import com.monmontage.app.model.SegmentOps
+import com.monmontage.app.render.KitColors
 import com.monmontage.app.render.Painter
 import com.monmontage.app.ui.MontageViewModel
 import com.monmontage.app.ui.components.MediaThumbnail
@@ -42,10 +47,22 @@ fun ClipEditScreen(vm: MontageViewModel, clipId: Long, onBack: () -> Unit) {
         LaunchedEffect(Unit) { onBack() }
         return
     }
+    val branding by vm.branding.collectAsStateWithLifecycle()
+    val kit = branding.kitFor(project)
+    val colors = KitColors(kit.accent, kit.primary, kit.dark)
+    if (clip.isCarton) {
+        CartonEditScreen(vm, clip, project.cardStyle, colors, onBack)
+        return
+    }
+    val logo by produceState<android.graphics.Bitmap?>(null, kit.id, kit.logoUri) { value = vm.logoBitmap(kit) }
+    /** Dernière légende modifiée : montrée dans l'aperçu tant qu'aucune autre n'est à l'écran. */
+    var focusedCaptionId by remember { mutableStateOf<Long?>(null) }
+    val focused = clip.captions.firstOrNull { it.id == focusedCaptionId }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (clip.isVideo) "Découpe et légendes" else "Photo et légendes") },
+                title = { Text(if (clip.isVideo) "Découpe, légendes et logo" else "Photo, légendes et logo") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } },
             )
         },
@@ -67,24 +84,65 @@ fun ClipEditScreen(vm: MontageViewModel, clipId: Long, onBack: () -> Unit) {
                     else "Illustration : son d'origine coupé, accompagnée par la musique.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                VideoTrimEditor(clip = clip, onSegmentsChange = { vm.setSegments(clip.id, it) })
+                // Un seul aperçu : la vidéo, avec la légende (à son moment) et le logo simulés par-dessus.
+                VideoTrimEditor(
+                    clip = clip,
+                    onSegmentsChange = { vm.setSegments(clip.id, it) },
+                    overlay = { pos -> MediaOverlay(clip, SegmentOps.editedTimeAt(clip.segments, pos), focused, logo, colors) },
+                )
             } else {
-                PhotoEditor(clip) { vm.updateClip(clip.copy(photoDurationMs = it)) }
+                PhotoEditor(clip, overlay = { MediaOverlay(clip, null, focused ?: clip.captions.firstOrNull(), logo, colors) }) {
+                    vm.updateClip(clip.copy(photoDurationMs = it))
+                }
             }
+            Text(
+                "L'aperçu simule le rendu final : légende façon JT et logo en miniature à leur place réelle.",
+                style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
+            )
             HorizontalDivider()
             LogoOnClip(vm, clip)
+            HorizontalDivider()
             CaptionsEditor(
                 captions = clip.captions,
                 clipDurationMs = clip.editedDurationMs,
                 onChange = { vm.setCaptions(clip.id, it) },
+                onFocus = { focusedCaptionId = it },
+            )
+        }
+    }
+}
+
+/**
+ * Calque de simulation par-dessus le média (cadre 16:9 de la vidéo finale) :
+ * légende active à [editedMs] (sinon [fallback]) et logo si activé pour ce média.
+ */
+@Composable
+private fun BoxScope.MediaOverlay(clip: Clip, editedMs: Long?, fallback: Caption?, logo: android.graphics.Bitmap?, colors: KitColors) {
+    val active = editedMs?.let { t -> clip.captions.firstOrNull { t >= it.startMs && t <= it.startMs + it.durationMs } }
+    val caption = active ?: fallback
+    if (caption != null) {
+        val bmp = remember(caption.name, caption.role, colors) { Painter.renderCaptionBitmap(640, 360, caption.name, caption.role, colors).asImageBitmap() }
+        Image(bmp, "Simulation de la légende", Modifier.matchParentSize())
+    }
+    if (clip.showLogo && logo != null) {
+        BoxWithConstraints(Modifier.matchParentSize()) {
+            Image(
+                logo.asImageBitmap(), "Simulation du logo",
+                Modifier.align(Alignment.BottomEnd).padding(end = maxHeight * 0.03f, bottom = maxHeight * 0.03f)
+                    .height(maxHeight * 0.07f).aspectRatio(logo.width.toFloat() / logo.height),
+                alpha = 0.9f,
             )
         }
     }
 }
 
 @Composable
-private fun PhotoEditor(clip: Clip, onDuration: (Long) -> Unit) {
-    MediaThumbnail(clip.uri, false, Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)), sizePx = 1024)
+private fun PhotoEditor(clip: Clip, overlay: @Composable BoxScope.() -> Unit, onDuration: (Long) -> Unit) {
+    // Photo en « ajustement » sur fond noir : comme dans la vidéo (bandes noires si elle n'est pas en 16:9).
+    Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+        MediaThumbnail(clip.uri, false, Modifier.fillMaxSize(), sizePx = 1024, contentScale = ContentScale.Fit)
+        overlay()
+    }
     val seconds = (clip.photoDurationMs / 1000f).roundToInt()
     Text("Durée d'affichage : $seconds s")
     Slider(
@@ -96,17 +154,18 @@ private fun PhotoEditor(clip: Clip, onDuration: (Long) -> Unit) {
 }
 
 @Composable
-private fun CaptionsEditor(captions: List<Caption>, clipDurationMs: Long, onChange: (List<Caption>) -> Unit) {
+private fun CaptionsEditor(captions: List<Caption>, clipDurationMs: Long, onChange: (List<Caption>) -> Unit, onFocus: (Long) -> Unit) {
     Text("Légendes (bandeau façon journal télévisé)", style = MaterialTheme.typography.titleMedium)
     Text(
-        "Le bandeau apparaît sur ce clip au moment choisi (temps compté dans la partie conservée du clip).",
+        "Le bandeau apparaît au moment choisi, compté dans la partie conservée du média. " +
+            "Dans l'aperçu, il s'affiche quand la lecture atteint ce moment, ou dès que vous le modifiez.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     captions.forEach { c ->
         CaptionCard(
             caption = c,
             clipDurationMs = clipDurationMs,
-            onUpdate = { updated -> onChange(captions.map { if (it.id == updated.id) updated else it }) },
+            onUpdate = { updated -> onFocus(updated.id); onChange(captions.map { if (it.id == updated.id) updated else it }) },
             onDelete = { onChange(captions.filterNot { it.id == c.id }) },
         )
     }
@@ -114,7 +173,9 @@ private fun CaptionsEditor(captions: List<Caption>, clipDurationMs: Long, onChan
         enabled = clipDurationMs >= 1000,
         onClick = {
             val start = if (clipDurationMs > 3000) 1000L else 0L
-            onChange(captions + Caption(name = "Prénom Nom", role = "Fonction", startMs = start, durationMs = min(5000L, clipDurationMs - start)))
+            val added = Caption(name = "Prénom Nom", role = "Fonction", startMs = start, durationMs = min(5000L, clipDurationMs - start))
+            onFocus(added.id)
+            onChange(captions + added)
         },
         modifier = Modifier.fillMaxWidth().height(44.dp),
         border = BorderStroke(1.dp, AppColors.Outline),
@@ -130,10 +191,6 @@ private fun CaptionCard(caption: Caption, clipDurationMs: Long, onUpdate: (Capti
         colors = CardDefaults.outlinedCardColors(containerColor = AppColors.Background),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val preview = remember(caption.name, caption.role) {
-                Painter.renderCaptionPreview(640, 360, caption.name, caption.role).asImageBitmap()
-            }
-            Image(preview, "Aperçu du bandeau", Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)))
             OutlinedTextField(caption.name, { onUpdate(caption.copy(name = it)) }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(caption.role, { onUpdate(caption.copy(role = it)) }, label = { Text("Fonction") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
@@ -163,29 +220,14 @@ private fun CaptionCard(caption: Caption, clipDurationMs: Long, onUpdate: (Capti
     }
 }
 
-/** Logo en miniature sur ce média : aperçu fidèle (7 % de la hauteur, en bas à droite) + interrupteur. */
+/** Logo en miniature sur ce média : simple interrupteur, le rendu est visible dans l'aperçu ci-dessus. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun LogoOnClip(vm: MontageViewModel, clip: Clip) {
     val project by vm.project.collectAsStateWithLifecycle()
-    val logo by produceState<android.graphics.Bitmap?>(null) { value = vm.logoBitmap() }
-    Text("Logo en miniature", style = MaterialTheme.typography.titleMedium)
-    BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp))) {
-        MediaThumbnail(clip.uri, clip.isVideo, Modifier.fillMaxSize(), sizePx = 1024)
-        val l = logo
-        if (clip.showLogo && l != null) {
-            val h = maxHeight * 0.07f
-            Image(
-                l.asImageBitmap(), "Logo",
-                Modifier.align(Alignment.BottomEnd).padding(end = maxHeight * 0.03f, bottom = maxHeight * 0.03f)
-                    .height(h).aspectRatio(l.width.toFloat() / l.height),
-                alpha = 0.9f,
-            )
-        }
-    }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 56.dp)) {
         Column(Modifier.weight(1f)) {
-            Text("Afficher le logo sur ce média")
+            Text("Logo en miniature sur ce média", style = MaterialTheme.typography.titleMedium)
             Text("En bas à droite, pendant toute sa durée", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
         }
         Switch(checked = clip.showLogo, onCheckedChange = { vm.setClipLogo(clip.id, it) })
@@ -193,6 +235,66 @@ private fun LogoOnClip(vm: MontageViewModel, clip: Clip) {
     val all = project.clips.all { it.showLogo }
     TextButton(onClick = { vm.setLogoOnAllClips(!all) }) {
         Text(if (all) "Retirer le logo de tous les médias" else "Mettre le logo sur tous les médias du projet", color = AppColors.Link)
+    }
+}
+
+/** Carton façon JT : intertitre ou citation, dans le style et la charte du projet. */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun CartonEditScreen(vm: MontageViewModel, clip: Clip, style: com.monmontage.app.model.CardStyle, colors: KitColors, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, clip.cartonText, clip.cartonAuthor, clip.cartonQuote, style, colors) {
+        kotlinx.coroutines.delay(120)
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            Painter.renderCarton(context, 960, 540, style, clip.cartonText, clip.cartonAuthor, clip.cartonQuote, colors).asImageBitmap()
+        }
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (clip.cartonQuote) "Carton · citation" else "Carton · intertitre") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+                preview?.let { Image(it, "Aperçu du carton", Modifier.fillMaxSize()) }
+            }
+            Text("Style « ${style.label} » et couleurs de la charte du projet.", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                listOf(false to "Intertitre", true to "Citation").forEachIndexed { i, (q, label) ->
+                    SegmentedButton(
+                        selected = clip.cartonQuote == q, onClick = { vm.setCarton(clip.id, clip.cartonText, clip.cartonAuthor, q) },
+                        shape = SegmentedButtonDefaults.itemShape(i, 2),
+                    ) { Text(label) }
+                }
+            }
+            Text(
+                if (clip.cartonQuote) "Une phrase forte d'une interview, mise en avant à l'écran."
+                else "Annonce une nouvelle partie. Les intertitres deviennent aussi des chapitres YouTube.",
+                style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
+            )
+            OutlinedTextField(
+                value = clip.cartonText,
+                onValueChange = { vm.setCarton(clip.id, it.take(if (clip.cartonQuote) 180 else 50), clip.cartonAuthor, clip.cartonQuote) },
+                label = { Text(if (clip.cartonQuote) "Citation" else "Intertitre") },
+                minLines = if (clip.cartonQuote) 3 else 1, maxLines = 5, modifier = Modifier.fillMaxWidth(),
+            )
+            if (clip.cartonQuote) OutlinedTextField(
+                value = clip.cartonAuthor, onValueChange = { vm.setCarton(clip.id, clip.cartonText, it.take(50), true) },
+                label = { Text("Auteur (ex. Marie Le Goff, patronne pêcheuse)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            val seconds = (clip.photoDurationMs / 1000f).roundToInt()
+            Text("Durée : $seconds s")
+            Slider(
+                value = seconds.toFloat(), valueRange = 2f..8f, steps = 5,
+                onValueChange = { vm.updateClip(clip.copy(photoDurationMs = it.roundToInt() * 1000L)) },
+            )
+        }
     }
 }
 

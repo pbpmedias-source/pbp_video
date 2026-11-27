@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -143,6 +145,17 @@ fun HomeScreen(
                 )
             }
             item {
+                OutlinedButton(
+                    onClick = { onEditClip(vm.addCarton()) },
+                    shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, AppColors.Outline),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    Icon(Icons.Default.Add, null, tint = AppColors.OnSurface, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Ajouter un carton (intertitre ou citation)", color = AppColors.OnSurface)
+                }
+            }
+            item {
                 val e = project.endCard
                 SectionCard(
                     AppIcons.Lines, AppColors.TitleBg, AppColors.Link, "Générique de fin",
@@ -212,13 +225,15 @@ private fun ClipRow(
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(width = 72.dp, height = 54.dp)) {
-                MediaThumbnail(clip.uri, clip.isVideo, Modifier.fillMaxSize())
+                if (clip.isCarton) Box(Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(AppColors.blockColor(ClipType.CARTON)), contentAlignment = Alignment.Center) {
+                    Text(if (clip.cartonQuote) "« »" else "Aa", color = AppColors.Success, style = MaterialTheme.typography.titleMedium)
+                } else MediaThumbnail(clip.uri, clip.isVideo, Modifier.fillMaxSize())
                 DurationBadge(formatMs(clip.editedDurationMs).substringBeforeLast('.'), Modifier.align(Alignment.BottomStart).padding(4.dp))
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "${index + 1}. ${clip.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    "${index + 1}. ${if (clip.isCarton) (if (clip.cartonQuote) "Citation" else clip.cartonText.ifBlank { "Intertitre" }) else clip.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
                 )
                 if (clip.isVideo) {
@@ -227,6 +242,8 @@ private fun ClipRow(
                             TypeTag(t, selected = clip.type == t, onClick = { onType(t) })
                         }
                     }
+                } else if (clip.isCarton) {
+                    TypeTag(ClipType.CARTON)
                 } else {
                     TypeTag(ClipType.PHOTO)
                 }

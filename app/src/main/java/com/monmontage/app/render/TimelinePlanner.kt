@@ -23,6 +23,7 @@ sealed interface TimelineItem {
         val clip: Clip, override val startMs: Long, override val durationMs: Long,
         val captions: List<LocalCaption>,
     ) : TimelineItem
+    data class CartonItem(val clip: Clip, override val startMs: Long, override val durationMs: Long) : TimelineItem
     data class VideoItem(
         val clip: Clip, val segment: Segment, override val startMs: Long, override val durationMs: Long,
         val captions: List<LocalCaption>,
@@ -51,7 +52,10 @@ object TimelinePlanner {
             t += project.titleCard.durationMs
         }
         for (clip in project.clips) {
-            if (!clip.isVideo) {
+            if (clip.isCarton) {
+                items += TimelineItem.CartonItem(clip, t, clip.photoDurationMs)
+                t += clip.photoDurationMs
+            } else if (!clip.isVideo) {
                 val d = clip.photoDurationMs
                 items += TimelineItem.PhotoItem(clip, t, d, localCaptions(clip, 0, d))
                 t += d

@@ -91,4 +91,16 @@ object AppIcons {
             }
         }
     }
+
+    /** Réglages : trois curseurs. */
+    val Settings: ImageVector by lazy {
+        icon("Settings") {
+            stroke { moveTo(4f, 6f); lineTo(20f, 6f) }
+            stroke { moveTo(4f, 12f); lineTo(20f, 12f) }
+            stroke { moveTo(4f, 18f); lineTo(20f, 18f) }
+            path(fill = SolidColor(Color.Black)) { moveTo(9f, 4f); lineTo(11f, 4f); lineTo(11f, 8f); lineTo(9f, 8f); close() }
+            path(fill = SolidColor(Color.Black)) { moveTo(14f, 10f); lineTo(16f, 10f); lineTo(16f, 14f); lineTo(14f, 14f); close() }
+            path(fill = SolidColor(Color.Black)) { moveTo(6f, 16f); lineTo(8f, 16f); lineTo(8f, 20f); lineTo(6f, 20f); close() }
+        }
+    }
 }

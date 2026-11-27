@@ -14,6 +14,10 @@ data class UploadMetadata(
     /** "private", "unlisted" ou "public" */
     val privacy: String,
     val madeForKids: Boolean,
+    /** Publication programmée (ISO 8601 UTC, ex. 2026-12-01T17:00:00Z) ; la vidéo reste privée jusque-là. */
+    val publishAt: String? = null,
+    /** Langue de la vidéo et de la parole : améliore les sous-titres automatiques de YouTube. */
+    val language: String = "fr",
 )
 
 class UploadException(message: String, val retryable: Boolean = false) : Exception(message)
@@ -38,9 +42,12 @@ class YouTubeUploader(private val context: Context) {
                 put("title", meta.title.take(100).ifBlank { "Montage" })
                 put("description", meta.description.take(5000))
                 put("categoryId", "22")
+                put("defaultLanguage", meta.language)
+                put("defaultAudioLanguage", meta.language)
             })
             put("status", JSONObject().apply {
-                put("privacyStatus", meta.privacy)
+                put("privacyStatus", if (meta.publishAt != null) "private" else meta.privacy)
+                meta.publishAt?.let { put("publishAt", it) }
                 put("selfDeclaredMadeForKids", meta.madeForKids)
             })
         }.toString().toByteArray()
@@ -173,6 +180,7 @@ class YouTubeUploader(private val context: Context) {
             reason == "youtubeSignupRequired" -> "Ce compte Google n'a pas encore de chaîne YouTube. Créez-la depuis l'application YouTube."
             reason == "forbiddenPrivacySetting" -> "Cette visibilité n'est pas autorisée pour ce compte."
             reason == "invalidTitle" -> "Le titre n'est pas accepté par YouTube."
+            reason == "invalidPublishAt" -> "La date de publication programmée n'est pas valide (elle doit être dans le futur)."
             code == 403 -> "YouTube refuse l'envoi (${reason.ifBlank { "accès refusé" }}). Vérifiez que la YouTube Data API est activée."
             code >= 500 -> "YouTube est momentanément indisponible."
             else -> "Erreur YouTube $code ${reason}".trim()

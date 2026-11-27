@@ -17,6 +17,7 @@ class CaptionOverlay(
     private val caption: LocalCaption,
     private val width: Int,
     private val height: Int,
+    private val colors: KitColors = KitColors.PBP,
 ) : BitmapOverlay() {
 
     private var basePtsUs = C.TIME_UNSET
@@ -31,7 +32,7 @@ class CaptionOverlay(
 
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
         localMs(presentationTimeUs)
-        return bitmap ?: Painter.renderCaptionBitmap(width, height, caption.name, caption.role)
+        return bitmap ?: Painter.renderCaptionBitmap(width, height, caption.name, caption.role, colors)
             .also { bitmap = it }
     }
 

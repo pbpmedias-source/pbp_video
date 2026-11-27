@@ -134,13 +134,21 @@ fun YouTubePublishScreen(vm: MontageViewModel, onBack: () -> Unit, onChangeAccou
     val email by vm.youtubeEmail.collectAsStateWithLifecycle()
     val export = project.lastExport
     var title by remember { mutableStateOf(project.name.take(100)) }
-    var description by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf(vm.youtubeDescription()) }
+    var scheduled by remember { mutableStateOf(false) }
+    // Par défaut : demain à 18 h.
+    var scheduleAt by remember {
+        mutableStateOf(java.time.LocalDate.now().plusDays(1).atTime(18, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())
+    }
+    var showDate by remember { mutableStateOf(false) }
+    var showTime by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf("private") }
     var kids by remember { mutableStateOf(false) }
     var wifiOnly by remember { mutableStateOf(true) }
 
     fun publish() {
-        if (vm.publishToYouTube(UploadMetadata(title.trim(), description.trim(), privacy, kids), wifiOnly)) onPublished()
+        val publishAt = if (scheduled) java.time.Instant.ofEpochMilli(scheduleAt).toString() else null
+        if (vm.publishToYouTube(UploadMetadata(title.trim(), description.trim(), if (scheduled) "private" else privacy, kids, publishAt), wifiOnly)) onPublished()
     }
     // Android 13+ : la notification de progression demande une autorisation (l'envoi marche sans).
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { publish() }
@@ -195,12 +203,37 @@ fun YouTubePublishScreen(vm: MontageViewModel, onBack: () -> Unit, onChangeAccou
             )
             OutlinedTextField(
                 value = description, onValueChange = { description = it.take(5000).replace("<", "").replace(">", "") },
-                label = { Text("Description") }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth(),
+                label = { Text("Description") }, minLines = 4, maxLines = 12, modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("Pré-remplie : présentation, chapitres (légendes et intertitres) et crédits") },
             )
+            TextButton(onClick = { description = vm.youtubeDescription() }) { Text("Régénérer depuis le projet", color = AppColors.Link) }
 
-            Text("Visibilité", style = MaterialTheme.typography.labelMedium, color = AppColors.Muted)
+            // ----- Publication programmée -----
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 52.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Programmer la publication")
+                    Text("Envoyée en privée, rendue publique à l'heure choisie", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+                }
+                Switch(checked = scheduled, onCheckedChange = { scheduled = it })
+            }
+            if (scheduled) {
+                val zoned = java.time.Instant.ofEpochMilli(scheduleAt).atZone(java.time.ZoneId.systemDefault())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { showDate = true }, border = BorderStroke(1.dp, AppColors.Outline), modifier = Modifier.weight(1f).height(48.dp)) {
+                        Text(zoned.format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM yyyy", java.util.Locale.FRENCH)), color = AppColors.OnSurface)
+                    }
+                    OutlinedButton(onClick = { showTime = true }, border = BorderStroke(1.dp, AppColors.Outline), modifier = Modifier.weight(0.6f).height(48.dp)) {
+                        Text(zoned.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")), color = AppColors.OnSurface)
+                    }
+                }
+                if (scheduleAt < System.currentTimeMillis() + 15 * 60_000) {
+                    Text("Choisissez une heure au moins 15 minutes plus tard.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            if (!scheduled) Text("Visibilité", style = MaterialTheme.typography.labelMedium, color = AppColors.Muted)
             val options = listOf("private" to "Privée", "unlisted" to "Non répertoriée", "public" to "Publique")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            if (!scheduled) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 options.forEachIndexed { i, (value, label) ->
                     SegmentedButton(
                         selected = privacy == value, onClick = { privacy = value },
@@ -208,7 +241,7 @@ fun YouTubePublishScreen(vm: MontageViewModel, onBack: () -> Unit, onChangeAccou
                     ) { Text(label, maxLines = 1) }
                 }
             }
-            Text(
+            if (!scheduled) Text(
                 when (privacy) {
                     "private" -> "Privée : vous vérifiez sur YouTube avant de la rendre publique."
                     "unlisted" -> "Non répertoriée : visible seulement avec le lien."
@@ -237,14 +270,53 @@ fun YouTubePublishScreen(vm: MontageViewModel, onBack: () -> Unit, onChangeAccou
             }
 
             Button(
-                enabled = title.isNotBlank(),
+                enabled = title.isNotBlank() && (!scheduled || scheduleAt >= System.currentTimeMillis() + 15 * 60_000),
                 onClick = {
                     if (Build.VERSION.SDK_INT >= 33) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else publish()
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) { Text("Publier") }
+            ) { Text(if (scheduled) "Envoyer et programmer" else "Publier") }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showDate) {
+        val zone = java.time.ZoneId.systemDefault()
+        val current = java.time.Instant.ofEpochMilli(scheduleAt).atZone(zone)
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = current.toLocalDate().atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { ms ->
+                        val day = java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneOffset.UTC).toLocalDate()
+                        scheduleAt = day.atTime(current.toLocalTime()).atZone(zone).toInstant().toEpochMilli()
+                    }
+                    showDate = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showDate = false }) { Text("Annuler") } },
+        ) { DatePicker(state) }
+    }
+    if (showTime) {
+        val zone = java.time.ZoneId.systemDefault()
+        val current = java.time.Instant.ofEpochMilli(scheduleAt).atZone(zone)
+        val state = rememberTimePickerState(initialHour = current.hour, initialMinute = current.minute, is24Hour = true)
+        AlertDialog(
+            onDismissRequest = { showTime = false },
+            containerColor = AppColors.Surface,
+            title = { Text("Heure de publication") },
+            text = { TimePicker(state) },
+            confirmButton = {
+                TextButton(onClick = {
+                    scheduleAt = current.toLocalDate().atTime(state.hour, state.minute).atZone(zone).toInstant().toEpochMilli()
+                    showTime = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showTime = false }) { Text("Annuler") } },
+        )
     }
 }
 

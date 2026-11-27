@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import com.monmontage.app.model.CardStyle
+import com.monmontage.app.render.KitColors
 import com.monmontage.app.render.MediaUtils
 import com.monmontage.app.render.Painter
 import com.monmontage.app.ui.MontageViewModel
@@ -53,22 +54,23 @@ fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit)
     val title = project.titleCard
     val end = project.endCard
 
-    val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setLogo(uri) }
     val bgPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) vm.setCardBackground(uri) }
 
-    val logo by produceState<Bitmap?>(null, branding.logoUri) { value = vm.logoBitmap() }
+    val kit = branding.kitFor(project)
+    val colors = KitColors(kit.accent, kit.primary, kit.dark)
+    val logo by produceState<Bitmap?>(null, kit.id, kit.logoUri) { value = vm.logoBitmap(kit) }
     val background by produceState<Bitmap?>(null, project.cardBackgroundUri) {
         value = project.cardBackgroundUri?.let { u -> withContext(Dispatchers.IO) { runCatching { MediaUtils.decodeBitmap(context, u, 960, 540) }.getOrNull() } }
     }
     fun render(style: CardStyle, w: Int, h: Int): Bitmap =
-        if (isTitle) Painter.renderTitleCard(context, w, h, style, title, logo, background)
-        else Painter.renderEndCard(context, w, h, style, end, logo, background)
+        if (isTitle) Painter.renderTitleCard(context, w, h, style, title, logo, background, colors)
+        else Painter.renderEndCard(context, w, h, style, end, logo, background, colors)
 
-    val preview by produceState<ImageBitmap?>(null, title, end, project.cardStyle, logo, background, isTitle) {
+    val preview by produceState<ImageBitmap?>(null, title, end, project.cardStyle, logo, background, isTitle, colors) {
         delay(120) // évite de redessiner à chaque frappe
         value = withContext(Dispatchers.Default) { render(project.cardStyle, 960, 540).asImageBitmap() }
     }
-    val styleThumbs by produceState<Map<CardStyle, ImageBitmap>>(emptyMap(), title, end, logo, background, isTitle) {
+    val styleThumbs by produceState<Map<CardStyle, ImageBitmap>>(emptyMap(), title, end, logo, background, isTitle, colors) {
         delay(300)
         value = withContext(Dispatchers.Default) { CardStyle.entries.associateWith { render(it, 320, 180).asImageBitmap() } }
     }
@@ -175,29 +177,43 @@ fun CardEditorScreen(vm: MontageViewModel, isTitle: Boolean, onBack: () -> Unit)
                 if (isTitle) vm.setTitleCard(title.copy(durationMs = ms)) else vm.setEndCard(end.copy(durationMs = ms))
             })
 
-            // ----- Logo -----
+            // ----- Charte graphique (logo + couleurs, définie dans les Réglages généraux) -----
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = AppColors.Surface)) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(AppColors.Track), contentAlignment = Alignment.Center) {
-                        logo?.let { Image(it.asImageBitmap(), null, Modifier.size(38.dp), contentScale = ContentScale.Fit) }
+            Text("Charte graphique de ce projet", style = MaterialTheme.typography.titleSmall)
+            var kitMenu by remember { mutableStateOf(false) }
+            Box {
+                Card(
+                    onClick = { kitMenu = true }, shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.Surface),
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)).background(androidx.compose.ui.graphics.Color(kit.dark)), contentAlignment = Alignment.Center) {
+                            logo?.let { Image(it.asImageBitmap(), null, Modifier.size(38.dp), contentScale = ContentScale.Fit) }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(kit.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                                listOf(kit.accent, kit.primary, kit.dark).forEach { c ->
+                                    Box(Modifier.size(16.dp).clip(RoundedCornerShape(8.dp)).background(androidx.compose.ui.graphics.Color(c)))
+                                }
+                            }
+                        }
+                        Text("Changer", color = AppColors.Link, style = MaterialTheme.typography.labelLarge)
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Logo", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            if (branding.logoUri == null) "PBP Médias (par défaut) · commun à tous les projets" else "Logo personnalisé · commun à tous les projets",
-                            style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
+                }
+                DropdownMenu(expanded = kitMenu, onDismissRequest = { kitMenu = false }) {
+                    branding.kits.forEach { k ->
+                        DropdownMenuItem(
+                            text = { Text(k.name + if (k.id == branding.defaultKitId) " (par défaut)" else "") },
+                            onClick = { vm.setProjectKit(k.id); kitMenu = false },
                         )
-                    }
-                    TextButton(onClick = { logoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        Text("Changer", color = AppColors.Link)
                     }
                 }
             }
-            if (branding.logoUri != null) TextButton(onClick = { vm.setLogo(null) }) { Text("Revenir au logo PBP Médias", color = AppColors.Link) }
             Text(
-                "Le logo en miniature se règle média par média, à côté des légendes (toucher un média dans le montage).",
+                "Logo et couleurs se modifient dans Mes projets › Réglages généraux. " +
+                    "Le logo en miniature se règle média par média, à côté des légendes.",
                 style = MaterialTheme.typography.bodySmall, color = AppColors.Muted,
             )
             Spacer(Modifier.height(16.dp))

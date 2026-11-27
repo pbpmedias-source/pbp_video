@@ -6,6 +6,8 @@ import android.graphics.BitmapFactory
 import com.monmontage.app.R
 import android.net.Uri
 import android.os.StatFs
+import com.monmontage.app.model.BrandKit
+import com.monmontage.app.model.ClipType
 import com.monmontage.app.model.Branding
 import com.monmontage.app.model.MusicSettings
 import com.monmontage.app.model.Project
@@ -34,6 +36,10 @@ data class PreparedProject(
     val transition: TransitionSettings,
     /** Calque du logo en miniature (null = désactivé). */
     val watermarkFile: File?,
+    /** Couleurs de la charte du projet (légendes). */
+    val colors: KitColors,
+    /** Image de chaque carton (intertitre ou citation). */
+    val cartonFiles: Map<Long, File> = emptyMap(),
 )
 
 class ProjectPreparer(private val context: Context) {
@@ -47,7 +53,7 @@ class ProjectPreparer(private val context: Context) {
             val dir = File(context.cacheDir, "render").apply { mkdirs() }
 
             // Médias supprimés de la galerie depuis la création du projet : on le dit clairement.
-            val missing = project.clips.filter { clip ->
+            val missing = project.clips.filter { it.hasMedia }.filter { clip ->
                 runCatching { context.contentResolver.openFileDescriptor(clip.uri, "r")?.use { true } ?: false }.getOrDefault(false).not()
             }
             require(missing.isEmpty()) {
@@ -56,17 +62,25 @@ class ProjectPreparer(private val context: Context) {
             }
 
             onStep("Préparation des génériques…")
-            val logo = loadLogo(branding, spec)
+            val kit = branding.kitFor(project)
+            val colors = KitColors(kit.accent, kit.primary, kit.dark)
+            val logo = loadLogo(kit, spec.height / 2)
             val background = project.cardBackgroundUri?.let { uri ->
                 runCatching { MediaUtils.decodeBitmap(context, uri, spec.width * 2, spec.height * 2) }.getOrNull()
             }
             val titleFile = if (project.titleCard.enabled)
-                writePng(Painter.renderTitleCard(context, spec.width, spec.height, project.cardStyle, project.titleCard, logo, background), File(dir, "title_${spec.height}.png"))
+                writePng(Painter.renderTitleCard(context, spec.width, spec.height, project.cardStyle, project.titleCard, logo, background, colors), File(dir, "title_${spec.height}.png"))
             else null
             val endFile = if (project.endCard.enabled)
-                writePng(Painter.renderEndCard(context, spec.width, spec.height, project.cardStyle, project.endCard, logo, background), File(dir, "end_${spec.height}.png"))
+                writePng(Painter.renderEndCard(context, spec.width, spec.height, project.cardStyle, project.endCard, logo, background, colors), File(dir, "end_${spec.height}.png"))
             else null
             background?.recycle()
+            val cartonFiles = project.clips.filter { it.isCarton }.associate { c ->
+                c.id to writePng(
+                    Painter.renderCarton(context, spec.width, spec.height, project.cardStyle, c.cartonText, c.cartonAuthor, c.cartonQuote, colors),
+                    File(dir, "carton_${c.id}_${spec.height}.png"),
+                )
+            }
             val watermarkFile = if (project.clips.any { it.showLogo } && logo != null)
                 writePng(Painter.renderWatermark(spec.width, spec.height, logo), File(dir, "watermark_${spec.height}.png"))
             else null
@@ -74,7 +88,7 @@ class ProjectPreparer(private val context: Context) {
 
             // Photos : décodées une par une, redimensionnées à la taille de sortie, orientation EXIF appliquée.
             onStep("Préparation des photos…")
-            val photoFiles = project.clips.filter { !it.isVideo }.associate { clip ->
+            val photoFiles = project.clips.filter { it.type == ClipType.PHOTO }.associate { clip ->
                 val f = File(dir, "photo_${clip.id}_${spec.height}.jpg")
                 if (!f.exists()) {
                     val bmp = MediaUtils.decodeBitmap(context, clip.uri, spec.width, spec.height)
@@ -95,13 +109,12 @@ class ProjectPreparer(private val context: Context) {
             }
 
             ensureFreeSpace(dir, timeline.totalMs, spec)
-            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music, project.transition, watermarkFile)
+            PreparedProject(timeline, titleFile, endFile, photoFiles, musicUri, musicMs, project.music, project.transition, watermarkFile, colors, cartonFiles)
         }
 
-    /** Logo choisi par l'utilisateur, sinon logo PBP Médias fourni avec l'application. */
-    fun loadLogo(branding: Branding, spec: OutputSpec): Bitmap? {
-        val maxSide = spec.height / 2
-        branding.logoUri?.let { uri ->
+    /** Logo de la charte, sinon logo PBP Médias fourni avec l'application. */
+    fun loadLogo(kit: BrandKit, maxSide: Int): Bitmap? {
+        kit.logoUri?.let { uri ->
             runCatching { return MediaUtils.decodeBitmap(context, uri, maxSide, maxSide) }
         }
         return runCatching {

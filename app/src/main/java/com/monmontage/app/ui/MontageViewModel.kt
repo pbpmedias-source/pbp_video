@@ -108,7 +108,7 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             val b = _branding.value
             _projects.value = repo.loadAll().map { p ->
-                val first = p.clips.firstOrNull()
+                val first = p.clips.firstOrNull { it.hasMedia }
                 ProjectSummary(
                     id = p.id, name = p.name, createdAt = p.createdAt, updatedAt = p.updatedAt,
                     durationMs = if (p.clips.isEmpty()) 0 else TimelinePlanner.plan(p, b).totalMs,
@@ -121,7 +121,7 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newProject(): String {
         val count = _projects.value.size + 1
-        val p = Project(name = "Projet $count", titleCard = TitleCard(title = "Projet $count"))
+        val p = Project(name = "Projet $count", titleCard = TitleCard(title = "Projet $count"), kitId = _branding.value.defaultKitId)
         _project.value = p
         editing = true
         viewModelScope.launch(Dispatchers.IO) { repo.save(p) }
@@ -244,6 +244,23 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
         p.copy(clips = p.clips.map { if (it.id == id) it.copy(captions = captions) else it })
     }
 
+    /** Ajoute un carton (intertitre par défaut) à la fin du montage et renvoie son identifiant. */
+    fun addCarton(): Long {
+        val c = Clip(
+            uri = Uri.EMPTY, mimeType = "", type = ClipType.CARTON, displayName = "Carton",
+            photoDurationMs = 3_000, cartonText = "Intertitre",
+        )
+        _project.update { it.copy(clips = it.clips + c) }
+        return c.id
+    }
+
+    fun setCarton(id: Long, text: String, author: String, quote: Boolean) = _project.update { p ->
+        p.copy(clips = p.clips.map { if (it.id == id) it.copy(cartonText = text, cartonAuthor = author, cartonQuote = quote) else it })
+    }
+
+    /** Description YouTube pré-remplie (présentation, chapitres, crédits). */
+    fun youtubeDescription(): String = com.monmontage.app.youtube.Description.build(_project.value)
+
     fun removeClip(id: Long) = _project.update { p -> p.copy(clips = p.clips.filterNot { it.id == id }) }
 
     fun moveClip(id: Long, delta: Int) = _project.update { p ->
@@ -267,15 +284,48 @@ class MontageViewModel(app: Application) : AndroidViewModel(app) {
         _project.update { it.copy(cardBackgroundUri = uri) }
     }
 
-    /** null = revenir au logo PBP Médias fourni avec l'application. */
-    fun setLogo(uri: Uri?) {
-        uri?.let(::keepAccess)
-        _branding.update { it.copy(logoUri = uri) }
+    // ---------- Réglages généraux : chartes graphiques ----------
+
+    /** Charte du projet ouvert. */
+    fun currentKit(): BrandKit = _branding.value.kitFor(_project.value)
+
+    fun setProjectKit(kitId: String) = _project.update { it.copy(kitId = kitId) }
+
+    /** Crée une charte (copie de la charte par défaut) et renvoie son identifiant. */
+    fun newKit(): String {
+        val base = _branding.value.defaultKit
+        val kit = base.copy(id = java.util.UUID.randomUUID().toString(), name = "Nouvelle charte")
+        _branding.update { it.copy(kits = it.kits + kit) }
+        return kit.id
     }
 
-    /** Logo courant (choisi ou par défaut), réduit pour l'affichage. */
-    suspend fun logoBitmap(): android.graphics.Bitmap? =
-        withContext(Dispatchers.IO) { preparer.loadLogo(_branding.value, OutputSpec.PREVIEW) }
+    fun saveKit(kit: BrandKit) {
+        kit.logoUri?.let(::keepAccess)
+        _branding.update { b -> b.copy(kits = b.kits.map { if (it.id == kit.id) kit else it }) }
+    }
+
+    fun duplicateKit(id: String) = _branding.update { b ->
+        val src = b.kits.firstOrNull { it.id == id } ?: return@update b
+        b.copy(kits = b.kits + src.copy(id = java.util.UUID.randomUUID().toString(), name = "${src.name} (copie)"))
+    }
+
+    /** La dernière charte ne peut pas être supprimée ; les projets qui l'utilisaient passent à la charte par défaut. */
+    fun deleteKit(id: String) = _branding.update { b ->
+        if (b.kits.size <= 1) return@update b
+        val kits = b.kits.filterNot { it.id == id }
+        b.copy(kits = kits, defaultKitId = if (b.defaultKitId == id) kits.first().id else b.defaultKitId)
+    }
+
+    fun setDefaultKit(id: String) = _branding.update { it.copy(defaultKitId = id) }
+
+    /** Logo d'une charte (celle du projet ouvert par défaut), réduit pour l'affichage. */
+    suspend fun logoBitmap(kit: BrandKit? = null): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) { preparer.loadLogo(kit ?: currentKit(), 240) }
+
+    /** Couleurs dominantes du logo d'une charte. */
+    suspend fun logoPalette(kit: BrandKit): List<Int> = withContext(Dispatchers.Default) {
+        logoBitmap(kit)?.let { Palette.dominant(it) } ?: emptyList()
+    }
 
     // ---------- Musique et transitions ----------
 

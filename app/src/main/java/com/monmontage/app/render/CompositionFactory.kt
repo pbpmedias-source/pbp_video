@@ -43,7 +43,7 @@ object CompositionFactory {
             fun effects(captions: List<LocalCaption>, withLogo: Boolean = false): List<Effect> = buildList {
                 add(presentation)
                 if (isZoom) addAll(transition)
-                addAll(captionEffects(captions, spec))
+                addAll(captionEffects(captions, spec, prepared.colors))
                 val wm = prepared.watermarkFile
                 if (withLogo && wm != null) add(OverlayEffect(ImmutableList.of<TextureOverlay>(WatermarkOverlay(wm))))
                 if (!isZoom) addAll(transition)
@@ -53,6 +53,8 @@ object CompositionFactory {
                     imageItem(requireNotNull(prepared.titleCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.EndCardItem ->
                     imageItem(requireNotNull(prepared.endCardFile), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
+                is TimelineItem.CartonItem ->
+                    imageItem(prepared.cartonFiles.getValue(item.clip.id), MimeTypes.IMAGE_PNG, item.durationMs, effects(emptyList()))
                 is TimelineItem.PhotoItem ->
                     imageItem(prepared.photoFiles.getValue(item.clip.id), MimeTypes.IMAGE_JPEG, item.durationMs, effects(item.captions, withLogo = item.clip.showLogo))
                 is TimelineItem.VideoItem -> {
@@ -104,9 +106,9 @@ object CompositionFactory {
         return EditedMediaItem.Builder(mediaItem).setEffects(Effects(audio, video)).build()
     }
 
-    private fun captionEffects(captions: List<LocalCaption>, spec: OutputSpec): List<Effect> {
+    private fun captionEffects(captions: List<LocalCaption>, spec: OutputSpec, colors: KitColors): List<Effect> {
         if (captions.isEmpty()) return emptyList()
-        val overlays: List<TextureOverlay> = captions.map { CaptionOverlay(it, spec.width, spec.height) }
+        val overlays: List<TextureOverlay> = captions.map { CaptionOverlay(it, spec.width, spec.height, colors) }
         return listOf(OverlayEffect(ImmutableList.copyOf(overlays)))
     }
 

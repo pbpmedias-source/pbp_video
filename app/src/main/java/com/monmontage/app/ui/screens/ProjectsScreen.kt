@@ -42,7 +42,8 @@ import java.util.Locale
 /** Écran d'ouverture : la liste des montages enregistrés. */
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
-fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onLogo: () -> Unit, onLibrary: () -> Unit) {
+fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onSettings: () -> Unit, onLibrary: () -> Unit) {
+    val branding by vm.branding.collectAsStateWithLifecycle()
     val projects by vm.projects.collectAsStateWithLifecycle()
     var menuFor by remember { mutableStateOf<ProjectSummary?>(null) }
     LaunchedEffect(Unit) { vm.refreshProjects() }
@@ -90,18 +91,21 @@ fun ProjectsScreen(vm: MontageViewModel, onOpen: () -> Unit, onLogo: () -> Unit,
             }
             item {
                 Card(
-                    onClick = onLogo,
+                    onClick = onSettings,
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = AppColors.Background),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 ) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconTile(AppIcons.Title, AppColors.TitleBg, AppColors.Link)
+                        IconTile(AppIcons.Settings, AppColors.TitleBg, AppColors.Link)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Logo", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
-                            Text("Commun à tous les projets", style = MaterialTheme.typography.bodySmall, color = AppColors.Muted)
+                            Text("Réglages généraux", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
+                            Text(
+                                "Charte par défaut : ${branding.defaultKit.name} · ${branding.kits.size} charte(s)",
+                                style = MaterialTheme.typography.bodySmall, color = AppColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
                         }
                         Text("Modifier", color = AppColors.Link, style = MaterialTheme.typography.labelLarge)
                     }

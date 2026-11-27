@@ -43,7 +43,7 @@ import java.io.File
 
 /** Miniature chargée en arrière-plan. */
 @Composable
-fun MediaThumbnail(uri: Uri, isVideo: Boolean, modifier: Modifier = Modifier, sizePx: Int = 320) {
+fun MediaThumbnail(uri: Uri, isVideo: Boolean, modifier: Modifier = Modifier, sizePx: Int = 320, contentScale: ContentScale = ContentScale.Crop) {
     val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(null, uri, sizePx) {
         value = withContext(Dispatchers.IO) { MediaUtils.thumbnail(context, uri, isVideo, sizePx)?.asImageBitmap() }
@@ -53,7 +53,7 @@ fun MediaThumbnail(uri: Uri, isVideo: Boolean, modifier: Modifier = Modifier, si
         contentAlignment = Alignment.Center,
     ) {
         val b = bitmap
-        if (b != null) Image(b, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        if (b != null) Image(b, null, Modifier.fillMaxSize(), contentScale = contentScale)
         else Text(if (isVideo) "Vidéo" else "Photo", style = MaterialTheme.typography.labelSmall)
     }
 }

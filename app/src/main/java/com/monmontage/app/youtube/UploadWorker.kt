@@ -24,6 +24,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         const val KEY_DESCRIPTION = "description"
         const val KEY_PRIVACY = "privacy"
         const val KEY_KIDS = "kids"
+        const val KEY_PUBLISH_AT = "publishAt"
         const val KEY_SENT = "sent"
         const val KEY_TOTAL = "total"
         const val KEY_VIDEO_ID = "videoId"
@@ -38,6 +39,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 .setInputData(workDataOf(
                     KEY_PROJECT to projectId, KEY_URI to uri.toString(), KEY_TITLE to meta.title,
                     KEY_DESCRIPTION to meta.description, KEY_PRIVACY to meta.privacy, KEY_KIDS to meta.madeForKids,
+                    KEY_PUBLISH_AT to meta.publishAt,
                 ))
                 .setConstraints(Constraints.Builder()
                     .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
@@ -62,6 +64,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             inputData.getString(KEY_DESCRIPTION).orEmpty(),
             inputData.getString(KEY_PRIVACY) ?: "private",
             inputData.getBoolean(KEY_KIDS, false),
+            inputData.getString(KEY_PUBLISH_AT),
         )
         val ctx = applicationContext
         runCatching { setForeground(foregroundInfo(meta.title, 0)) }
